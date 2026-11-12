@@ -12,7 +12,8 @@ See [rembox.org](https://rembox.org) for the docs. Until the site is live, insta
 ## Layout
 
 - [`cli/`](cli): the `rembox` command, in Go. `make help` lists the build, test and release targets.
-- [`site/`](site): rembox.org, and [`site/public/install.sh`](site/public/install.sh), the installer.
+- [`site/`](site): rembox.org, as plain HTML served by Caddy, and
+  [`site/public/install.sh`](site/public/install.sh), the installer.
 
 ## Releasing
 

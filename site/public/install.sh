@@ -67,8 +67,9 @@ main() {
   else
     fail "sha256sum or shasum is needed to check the download"
   fi
-  [ -n "$expected" ] && [ "$expected" = "$actual" ] ||
+  if [ -z "$expected" ] || [ "$expected" != "$actual" ]; then
     fail "the download doesn't match its checksum; please try again"
+  fi
   chmod 755 "$tmp/rembox"
 
   # /usr/local/bin usually belongs to root.

@@ -1,5 +1,5 @@
 /* rembox.org: one narrow column, dark like a terminal. Two heading sizes, and two for body
-   text: 1rem, and 0.875rem for notes, code, and the footer. No web fonts. */
+   text: 1rem, and 0.875rem for code and the footer. No web fonts. */
 
 :root {
   --bg: #161616;
@@ -85,6 +85,7 @@ pre {
 p code,
 dd code {
   padding: 0.1em 0.3em;
+  white-space: nowrap;
   background: var(--surface);
   border-radius: 3px;
 }
@@ -145,15 +146,11 @@ footer.site {
   }
 }
 
-.lede,
-.note {
+.lede {
   color: var(--muted);
 }
 .lede {
   margin-bottom: 2.5rem;
-}
-.note {
-  font-size: var(--small);
 }
 
 .command {
