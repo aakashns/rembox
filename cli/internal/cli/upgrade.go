@@ -1,9 +1,7 @@
 package cli
 
 import (
-	"bufio"
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"path/filepath"
@@ -70,7 +68,7 @@ func runUpgrade(a *App, args []string) error {
 	}
 
 	if !yes {
-		ok, err := a.confirm(fmt.Sprintf("Replace %s with rembox %s?", exe, latest))
+		ok, err := a.confirm(fmt.Sprintf("Replace %s with rembox %s?", exe, latest), false)
 		if err != nil {
 			return err
 		}
@@ -91,25 +89,4 @@ func runUpgrade(a *App, args []string) error {
 	}
 	fmt.Fprintf(a.Stdout, "Upgraded rembox to %s.\n", latest)
 	return nil
-}
-
-// errNoTerminal means a question was needed but there's no one to answer it.
-var errNoTerminal = errors.New("can't ask for confirmation without a terminal; re-run with --yes to proceed")
-
-// confirm asks a yes/no question; anything but y/yes means no.
-func (a *App) confirm(question string) (bool, error) {
-	if !a.Interactive {
-		return false, errNoTerminal
-	}
-	fmt.Fprintf(a.Stdout, "%s [y/N] ", question)
-	line, err := bufio.NewReader(a.Stdin).ReadString('\n')
-	if err != nil && line == "" {
-		fmt.Fprintln(a.Stdout)
-		return false, nil
-	}
-	switch strings.ToLower(strings.TrimSpace(line)) {
-	case "y", "yes":
-		return true, nil
-	}
-	return false, nil
 }

@@ -49,7 +49,7 @@
       <p id="copy-status" class="sr-only" role="status"></p>
 
       <p class="callout">
-        <strong>Early days.</strong> So far rembox installs and upgrades itself. Setting up servers
+        <strong>Early days.</strong> So far rembox installs, upgrades and removes itself. Setting up servers
         comes next, and this page will document each step as it lands.
       </p>
 
@@ -64,6 +64,12 @@
           <dd>
             Replaces rembox with the latest release, after showing both versions and asking first.
             Pass <code>--yes</code> to skip the question, e.g. in a script.
+          </dd>
+          <dt><code>rembox implode [--yes] [--backup | --no-backup]</code></dt>
+          <dd>
+            Removes rembox and its files in <code>~/.config/rembox</code> from this machine, after
+            listing them and asking first. Offers to back the files up to your home folder before
+            deleting them. Servers set up with rembox aren’t changed.
           </dd>
         </dl>
       </section>
@@ -92,10 +98,11 @@
         <p>
           <code>rembox upgrade</code> installs the latest release in place of the one you ran. If
           it’s in a folder only root can write to, as <code>/usr/local/bin</code> often is, run it
-          with sudo. To uninstall, delete the binary:
+          with sudo. <code>rembox implode</code> uninstalls rembox, and asks for sudo itself if it
+          needs it:
         </p>
         <pre class="block"><code>sudo rembox upgrade
-sudo rm /usr/local/bin/rembox</code></pre>
+rembox implode</code></pre>
       </section>
 
       <section aria-labelledby="security">

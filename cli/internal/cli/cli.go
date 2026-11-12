@@ -2,14 +2,18 @@
 package cli
 
 import (
+	"bufio"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"runtime"
 	"strings"
+	"time"
 
+	"github.com/aakashns/rembox/cli/internal/config"
 	"github.com/aakashns/rembox/cli/internal/release"
 	"github.com/aakashns/rembox/cli/internal/version"
 )
@@ -26,6 +30,14 @@ type App struct {
 	Executable func() (string, error) // path of the running binary
 	GOOS       string
 	GOARCH     string
+
+	ConfigDir func() (string, error)     // where rembox keeps its files
+	HomeDir   func() (string, error)     // where implode puts backups
+	Now       func() time.Time           // for backups' names
+	Sudo      func(args ...string) error // runs a command with sudo, at the terminal
+	Euid      int                        // 0 when run as root
+
+	in *bufio.Reader // Stdin, shared by every question
 }
 
 // Main runs rembox with the process's arguments and returns its exit code.
@@ -39,8 +51,19 @@ func Main() int {
 		Executable:  os.Executable,
 		GOOS:        runtime.GOOS,
 		GOARCH:      runtime.GOARCH,
+		ConfigDir:   config.Dir,
+		HomeDir:     os.UserHomeDir,
+		Now:         time.Now,
+		Sudo:        sudo,
+		Euid:        os.Geteuid(),
 	}
 	return app.Run(os.Args[1:])
+}
+
+func sudo(args ...string) error {
+	cmd := exec.Command("sudo", args...)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	return cmd.Run()
 }
 
 func isTerminal(f *os.File) bool {
@@ -82,6 +105,12 @@ func commands() []command {
 			summary: "Upgrade rembox to the latest release",
 			help:    upgradeHelp,
 			run:     runUpgrade,
+		},
+		{
+			name:    "implode",
+			summary: "Remove rembox and its files from this machine",
+			help:    implodeHelp,
+			run:     runImplode,
 		},
 	}
 }
@@ -205,4 +234,35 @@ func runVersion(a *App, args []string) error {
 	}
 	fmt.Fprintln(a.Stdout, version.String())
 	return nil
+}
+
+// errNoTerminal means a question was needed but there's no one to answer it.
+var errNoTerminal = errors.New("can't ask for confirmation without a terminal; re-run with --yes to proceed")
+
+// confirm asks a yes/no question. An empty answer (or end of input) means
+// def; anything else but y/yes means no.
+func (a *App) confirm(question string, def bool) (bool, error) {
+	if !a.Interactive {
+		return false, errNoTerminal
+	}
+	hint := "[y/N]"
+	if def {
+		hint = "[Y/n]"
+	}
+	fmt.Fprintf(a.Stdout, "%s %s ", question, hint)
+	if a.in == nil {
+		a.in = bufio.NewReader(a.Stdin)
+	}
+	line, err := a.in.ReadString('\n')
+	if err != nil && line == "" {
+		fmt.Fprintln(a.Stdout)
+		return def, nil
+	}
+	switch strings.ToLower(strings.TrimSpace(line)) {
+	case "":
+		return def, nil
+	case "y", "yes":
+		return true, nil
+	}
+	return false, nil
 }

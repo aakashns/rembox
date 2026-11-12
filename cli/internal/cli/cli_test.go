@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/aakashns/rembox/cli/internal/release"
 	"github.com/aakashns/rembox/cli/internal/release/releasetest"
@@ -16,6 +17,9 @@ type testApp struct {
 	*App
 	stdout, stderr *bytes.Buffer
 	exe            string // fake installed binary
+	home           string // fake home folder, where backups go
+	configDir      string // fake ~/.config/rembox (not created)
+	sudoArgs       []string
 	srv            *releasetest.Server
 }
 
@@ -38,7 +42,9 @@ func newTestApp(t *testing.T, current string) *testApp {
 		t.Fatal(err)
 	}
 
-	ta := &testApp{stdout: &bytes.Buffer{}, stderr: &bytes.Buffer{}, exe: exe, srv: srv}
+	home := t.TempDir()
+	ta := &testApp{stdout: &bytes.Buffer{}, stderr: &bytes.Buffer{}, exe: exe, srv: srv,
+		home: home, configDir: filepath.Join(home, ".config", "rembox")}
 	ta.App = &App{
 		Stdin:      strings.NewReader(""),
 		Stdout:     ta.stdout,
@@ -47,6 +53,14 @@ func newTestApp(t *testing.T, current string) *testApp {
 		Executable: func() (string, error) { return exe, nil },
 		GOOS:       "linux",
 		GOARCH:     "amd64",
+		ConfigDir:  func() (string, error) { return ta.configDir, nil },
+		HomeDir:    func() (string, error) { return home, nil },
+		Now:        func() time.Time { return time.Date(2026, 11, 12, 14, 30, 0, 0, time.UTC) },
+		Sudo: func(args ...string) error {
+			ta.sudoArgs = args
+			return os.Remove(args[len(args)-1]) // as if sudo rm had worked
+		},
+		Euid: 1000,
 	}
 	return ta
 }
@@ -66,7 +80,7 @@ func TestHelp(t *testing.T) {
 		if code := ta.Run(args); code != 0 {
 			t.Errorf("rembox %v: exit %d", args, code)
 		}
-		for _, want := range []string{"Usage:", "help", "version", "upgrade"} {
+		for _, want := range []string{"Usage:", "help", "version", "upgrade", "implode"} {
 			if !strings.Contains(ta.stdout.String(), want) {
 				t.Errorf("rembox %v: output missing %q:\n%s", args, want, ta.stdout)
 			}
