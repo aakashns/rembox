@@ -3,12 +3,8 @@ package cli
 import (
 	"errors"
 	"flag"
-	"fmt"
-	"io/fs"
 	"os/exec"
 	"strings"
-
-	"github.com/aakashns/rembox/cli/internal/config"
 )
 
 const sshHelp = `Usage: rembox ssh NAME [COMMAND...]
@@ -27,18 +23,11 @@ func runSSH(a *App, args []string) error {
 	case strings.HasPrefix(args[0], "-"):
 		return usagef("unknown flag %s", args[0])
 	}
-	dir, err := a.ConfigDir()
+	s, err := a.loadServer(args[0])
 	if err != nil {
 		return err
 	}
-	name, command := args[0], args[1:]
-	s, err := config.LoadServer(dir, name)
-	if errors.Is(err, fs.ErrNotExist) {
-		return fmt.Errorf("there's no server named %s; 'rembox list' shows your servers", name)
-	}
-	if err != nil {
-		return err
-	}
+	command := args[1:]
 
 	sshArgs := append(keyArgs(s), "--", s.Destination())
 	err = a.run("ssh", append(sshArgs, command...)...)

@@ -49,26 +49,50 @@
       <p id="copy-status" class="sr-only" role="status"></p>
 
       <p class="callout">
-        <strong>Early days.</strong> So far rembox adds, lists and logs in to servers, and installs,
-        upgrades and removes itself. Setting up servers comes next, and this page will document each
-        step as it lands.
+        <strong>Early days.</strong> So far <code>rembox setup</code> logs in to a server, checks it,
+        and installs its updates. The rest of setting up a server comes next, and this page will
+        document each step as it lands.
       </p>
 
       <section aria-labelledby="commands">
         <h2 id="commands">Commands</h2>
         <dl class="commands">
-          <dt><code>rembox setup [--host HOST] [--user USER] [--key PATH] [--name NAME]</code></dt>
+          <dt><code>rembox setup [--host HOST] [--user USER] [--key PATH] [--name NAME] [--yes]</code></dt>
           <dd>
-            Adds a server. Asks for its IP address or hostname, the user to log in as (root, by
-            default), the SSH key to log in with, and a name for it (its hostname, by default), then
-            checks that ssh can log in and saves it. Flags answer the questions up front, e.g. in a
-            script.
+            Gets a server ready for development, explaining each step as it goes:
+            <ol>
+              <li>
+                <strong>Log in.</strong> Asks for the server’s IP address or hostname, the user to
+                log in as (root, by default), the SSH key to log in with, and a name for it (its
+                hostname, by default), then checks that ssh can log in and saves it.
+              </li>
+              <li>
+                <strong>Check.</strong> Runs a short script on the server that reports its system,
+                processor, memory and disk, and checks that rembox can set it up: so far, Ubuntu or
+                Debian.
+              </li>
+              <li>
+                <strong>Update.</strong> Installs the latest version of every package with apt, then
+                restarts the server if an update needs it. Asks before each. Unless it logs in as root,
+                rembox does these with <code>sudo</code>, which may ask for the user’s password on the
+                server.
+              </li>
+            </ol>
+            Run it again any time: each step looks at the server as it is now and changes only what
+            needs changing. rembox keeps nothing about a server but how to log in to it. Flags answer
+            the questions up front, and <code>--yes</code> installs updates and restarts without
+            asking, e.g. in a script.
           </dd>
           <dt><code>rembox list</code></dt>
           <dd>Lists the servers you’ve added, with the user, host and key rembox logs in with.</dd>
           <dt><code>rembox ssh NAME [COMMAND...]</code></dt>
           <dd>
             Logs in to the server called NAME, as its user and with its key, or runs a command on it.
+          </dd>
+          <dt><code>rembox info NAME</code></dt>
+          <dd>
+            Shows what kind of machine the server called NAME is (its system, processor, memory and
+            disk) and whether rembox can set it up, by running the same script as setup.
           </dd>
           <dt><code>rembox help [command]</code></dt>
           <dd>Lists the commands, or explains one of them.</dd>
@@ -90,8 +114,11 @@
 
       <p>
         rembox prints every command it runs, like the <code>ssh</code> that checks a server, so you
-        can see exactly what it does and run it yourself. Before a sensitive or destructive command,
-        like a <code>sudo rm</code>, it asks first (unless you pass <code>--yes</code>).
+        can see exactly what it does and run it yourself. The scripts it runs on servers print each
+        of their commands too, and you can read them in
+        <a href="https://github.com/aakashns/rembox/tree/main/cli/internal/remote">the repo</a>.
+        Before a sensitive or destructive command, like a <code>sudo rm</code>, it asks first
+        (unless you pass <code>--yes</code>).
       </p>
 
       <section aria-labelledby="installing">
