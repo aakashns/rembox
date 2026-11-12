@@ -26,13 +26,19 @@ with, and a name for the server (its hostname, by default), and saves it, so
 server (your username on this machine, by default) and the port to move ssh to
 (a random one, by default).
 
+rembox keeps a Host block for each server in ~/.config/rembox/ssh_config. It
+asks to include that at the top of ~/.ssh/config, so 'ssh NAME', and ssh to
+the server's address, log in on the new port as your user, as rembox does.
+
 Then rembox runs setup.sh on the server, as root, in two ssh sessions. First,
 as the user you log in as, it:
 
   1. Checks that rembox can set up the server: so far, Ubuntu or Debian.
   2. Installs the latest version of every package with apt.
-  3. Adds your user, if it isn't there yet, with sudo (with no password, as
-     it has none) and the SSH keys of the user you log in as.
+  3. Adds your user, if it isn't there yet, with sudo and the SSH keys of the
+     user you log in as, and asks you for a password for it, if it has none.
+     sudo asks for it, so programs running as your user, like coding agents,
+     can't run commands as root without you.
   4. Sets sshd to listen on the new port too, and let in only keys.
 
 rembox then saves the server with your user and the new port, and logs in
@@ -53,7 +59,7 @@ changes only what needs changing. rembox doesn't keep anything about the
 server but how to log in to it.
 
 Unless rembox logs in as root, it runs setup.sh with sudo, which may ask for
-the user's password on the server.
+the user's password on the server: always, once it logs in as your user.
 `
 
 // defaultKeys are the private keys setup offers, in order of preference.
@@ -93,8 +99,17 @@ func runSetup(a *App, args []string) error {
 	if err != nil {
 		return err
 	}
+	include, err := a.askInclude(s.Name)
+	if err != nil {
+		return err
+	}
 	if err := a.saveServer(s); err != nil {
 		return err
+	}
+	if include {
+		if err := a.include(); err != nil {
+			return err
+		}
 	}
 
 	// Each session does all it can, so ssh and sudo ask for a password at
@@ -133,6 +148,42 @@ func (a *App) saveServer(s config.Server) error {
 	}
 	a.done(fmt.Sprintf("Saved %s (%s, port %d).", s.Name, s.Destination(), s.Port))
 	return nil
+}
+
+// askInclude asks to include rembox's ssh config in ~/.ssh/config, unless it
+// is already. It says whether to add it.
+func (a *App) askInclude(name string) (bool, error) {
+	home, dir, err := a.dirs()
+	if err != nil {
+		return false, err
+	}
+	if ok, err := hasInclude(home, dir); ok || err != nil {
+		return false, err
+	}
+	return a.confirm(fmt.Sprintf("Add '%s' to the top of ~/.ssh/config, so ssh %s logs in as rembox does?",
+		includeLine(home, dir), name), false), nil
+}
+
+// include adds rembox's ssh config to ~/.ssh/config.
+func (a *App) include() error {
+	home, dir, err := a.dirs()
+	if err != nil {
+		return err
+	}
+	if err := addInclude(home, dir); err != nil {
+		return err
+	}
+	a.done(fmt.Sprintf("Added '%s' to ~/.ssh/config.", includeLine(home, dir)))
+	return nil
+}
+
+// dirs are your home folder and rembox's config folder.
+func (a *App) dirs() (home, dir string, err error) {
+	if home, err = a.HomeDir(); err != nil {
+		return "", "", fmt.Errorf("can't find your home folder: %w", err)
+	}
+	dir, err = a.ConfigDir()
+	return home, dir, err
 }
 
 // cantLogIn says whether err is from ssh failing to log in.

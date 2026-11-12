@@ -12,10 +12,11 @@ import (
 
 const implodeHelp = `Usage: rembox implode
 
-Remove rembox from this machine: the rembox binary, and its files in
+Remove rembox from this machine: the rembox binary, its files in
 ~/.config/rembox (or $XDG_CONFIG_HOME/rembox), which say how to log in to
-your servers. Lists what it will remove and asks first. Servers set up with
-rembox aren't changed.
+your servers, and the line in ~/.ssh/config that includes them, if 'rembox
+setup' added it. Lists what it will remove and asks first. Servers set up
+with rembox aren't changed.
 
 If the binary is in a folder only root can write to, it removes it with sudo,
 showing the command and asking before it runs it. Run implode itself without
@@ -44,11 +45,22 @@ func runImplode(a *App, args []string) error {
 	}
 	_, err = os.Lstat(dir)
 	dirExists := err == nil
+	home, err := a.HomeDir()
+	if err != nil {
+		return fmt.Errorf("can't find your home folder: %w", err)
+	}
+	included, err := hasInclude(home, dir)
+	if err != nil {
+		return err
+	}
 
 	fmt.Fprintln(a.Stdout, "This removes rembox from this machine:")
 	fmt.Fprintf(a.Stdout, "  %s\n", exe)
 	if dirExists {
 		fmt.Fprintf(a.Stdout, "  %s\n", dir)
+	}
+	if included {
+		fmt.Fprintf(a.Stdout, "  '%s' in ~/.ssh/config\n", includeLine(home, dir))
 	}
 	fmt.Fprintln(a.Stdout, "Servers set up with rembox aren't changed.")
 
@@ -81,6 +93,12 @@ func runImplode(a *App, args []string) error {
 			return fmt.Errorf("removing %s: %w; delete it yourself to finish", dir, err)
 		}
 		fmt.Fprintf(a.Stdout, "Removed %s\n", dir)
+	}
+	if included {
+		if _, err := removeInclude(home, dir); err != nil {
+			return fmt.Errorf("%w; take '%s' out of ~/.ssh/config yourself to finish", err, includeLine(home, dir))
+		}
+		fmt.Fprintf(a.Stdout, "Removed '%s' from ~/.ssh/config\n", includeLine(home, dir))
 	}
 	fmt.Fprintln(a.Stdout, a.paint(green, "rembox is gone.")+" To reinstall: curl -fsSL https://rembox.aakashns.com/install.sh | sh")
 	return nil

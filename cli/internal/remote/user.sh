@@ -1,7 +1,7 @@
 # user.sh: adds your user on the server.
 
-# add_user USER: adds USER, if it isn't there yet, lets it use sudo without a
-# password, and lets in the SSH keys of the user rembox logged in as.
+# add_user USER: adds USER, if it isn't there yet, with a password for sudo,
+# and lets in the SSH keys of the user rembox logged in as.
 add_user() {
   local user=$1 login=${SUDO_USER:-root}
 
@@ -12,16 +12,23 @@ add_user() {
     run useradd --create-home --shell /bin/bash "$user"
   fi
   install_packages sudo
-  # Its own group (as cloud servers' default users have) shows it's an admin;
-  # the sudoers file lets it use sudo without a password, which it has none of.
   if ! id -nG "$user" | tr ' ' '\n' | grep -qx sudo; then
     run usermod --append --groups sudo "$user"
   fi
-  local sudoers="/etc/sudoers.d/rembox-$user" rule="$user ALL=(ALL:ALL) NOPASSWD: ALL"
-  if ! same "$sudoers" "$rule"; then
-    put "$sudoers" 440 "$rule" visudo -c -f
+
+  # sudo asks for the password, so programs running as USER, like coding
+  # agents, can't run commands as root without you. ssh doesn't take it.
+  if [[ $(passwd -S "$user" | cut -d ' ' -f 2) != P ]]; then
+    step "Set a password for $user, which sudo asks for"
+    until at_terminal passwd "$user"; do
+      warn "The password isn't set. Try again."
+    done
   fi
-  ok "$user can use sudo."
+  if sudo -l -U "$user" | grep -q NOPASSWD; then
+    warn "A rule in /etc/sudoers or /etc/sudoers.d lets $user use sudo without its password. To have sudo ask for it, remove the rule."
+  else
+    ok "$user can use sudo, with its password."
+  fi
 
   local home group
   home=$(getent passwd "$user" | cut -d: -f6)

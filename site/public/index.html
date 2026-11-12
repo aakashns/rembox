@@ -58,8 +58,9 @@
         <dl class="commands">
           <dt><code>rembox setup [NAME]</code></dt>
           <dd>
-            Adds a server (or, with NAME, changes one), then installs updates, adds your user, locks
-            down ssh, sets up fail2ban, and restarts it if needed.
+            Adds a server (or, with NAME, changes one), then installs updates, adds your user (whose
+            sudo asks for its password), locks down ssh, sets up fail2ban, and restarts it if needed.
+            Offers to set up <code>~/.ssh/config</code> so <code>ssh NAME</code> works too.
           </dd>
           <dt><code>rembox list</code></dt>
           <dd>Lists the servers you’ve added, with the user, host, port and key rembox logs in with.</dd>
@@ -75,7 +76,10 @@
           <dt><code>rembox upgrade</code></dt>
           <dd>Upgrades rembox to the latest release.</dd>
           <dt><code>rembox implode</code></dt>
-          <dd>Removes rembox and <code>~/.config/rembox</code> from this machine.</dd>
+          <dd>
+            Removes rembox, <code>~/.config/rembox</code>, and the line setup added to
+            <code>~/.ssh/config</code>.
+          </dd>
         </dl>
       </section>
 

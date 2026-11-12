@@ -39,6 +39,15 @@ run() {
   return "$status"
 }
 
+# at_terminal COMMAND...: shows a command, then runs it at the terminal, for
+# commands that ask you things, like passwd. Returns its exit status.
+at_terminal() {
+  local shown
+  shown=$(printf '%q ' "$@")
+  printf '\n    %s$ %s%s\n' "$CYAN" "${shown% }" "$RESET"
+  "$@" </dev/tty >/dev/tty 2>&1
+}
+
 # plural N WORD: "1 WORD", or "N WORDs".
 plural() {
   if [[ $1 == 1 ]]; then echo "1 $2"; else echo "$1 $2s"; fi

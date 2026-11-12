@@ -43,8 +43,8 @@ func serverPath(dir, name string) string {
 	return filepath.Join(dir, "servers", name+".json")
 }
 
-// SaveServer saves s under dir, replacing any server with its name. The file
-// is readable only by you.
+// SaveServer saves s under dir, replacing any server with its name, then
+// rewrites the ssh config. The file is readable only by you.
 func SaveServer(dir string, s Server) error {
 	if err := CheckName(s.Name); err != nil {
 		return err
@@ -53,18 +53,29 @@ func SaveServer(dir string, s Server) error {
 	if err != nil {
 		return err
 	}
-	path := serverPath(dir, s.Name)
+	if err := WriteFile(serverPath(dir, s.Name), append(b, '\n'), 0o600); err != nil {
+		return err
+	}
+	return writeSSHConfig(dir)
+}
+
+// WriteFile writes data to path with perm, making its folder if need be
+// (readable only by you). It writes a temporary file and renames it, so a
+// failed write doesn't leave half a file in place of a good one.
+func WriteFile(path string, data []byte, perm os.FileMode) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
-	// Written to a temporary file and renamed, so a failed write doesn't
-	// leave half a file in place of a good one.
 	tmp, err := os.CreateTemp(filepath.Dir(path), ".tmp-*")
 	if err != nil {
 		return err
 	}
 	defer os.Remove(tmp.Name())
-	if _, err := tmp.Write(append(b, '\n')); err != nil {
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Chmod(perm); err != nil {
 		tmp.Close()
 		return err
 	}
