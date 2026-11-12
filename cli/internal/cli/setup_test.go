@@ -66,14 +66,16 @@ func TestSetup(t *testing.T) {
 	key := ta.withKey(t, "id_ed25519")
 	// An IP address has no default name, so the name is typed; the rest are
 	// the defaults.
-	ta.typing("203.0.113.10", "", "", "", "box1", "", "")
+	ta.typing("203.0.113.10", "", "", "", "box1", "", "y")
 
 	ta.mustRun(t, "setup")
 	out := ta.stdout.String()
 	for _, want := range []string{"SSH port [22]:", "User to log in as [root]:", "SSH private key [~/.ssh/id_ed25519]:",
-		"Name for this server:", "Your user on the server [ada]:", "Port to move ssh to [23456]:",
+		"Name for this server:", "Your user on the server [ada]:",
 		"Saved box1 (root@203.0.113.10, port 22)", "(what setup.sh prints)",
 		"Saved box1 (ada@203.0.113.10, port 23456)",
+		"! If box1's cloud provider has a firewall, open port 23456/tcp in it now.",
+		"Move ssh to port 23456, closing port 22? [y/N]",
 		"box1 is set up. To log in: rembox ssh box1"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("output missing %q:\n%s", want, out)
@@ -126,7 +128,7 @@ func TestSetup(t *testing.T) {
 func TestSetupWithSudo(t *testing.T) {
 	ta := newTestApp(t, "0.1.0")
 	ta.withKey(t, "id_ed25519")
-	ta.typing("box", "", "ubuntu", "", "", "", "")
+	ta.typing("box", "", "ubuntu", "", "", "", "y")
 	ta.mustRun(t, "setup")
 	if !strings.Contains(ta.stdout.String(), `-- ubuntu@box sudo bash -c "$(cat `) {
 		t.Errorf("output:\n%s", ta.stdout)
@@ -148,18 +150,21 @@ func TestSetupAgain(t *testing.T) {
 		t.Fatal(err)
 	}
 	// The saved settings are the defaults; a new address replaces the old.
-	ta.typing("new.example.com", "", "", "", "", "")
+	ta.typing("new.example.com", "", "", "", "")
 	ta.mustRun(t, "setup", "box")
 	out := ta.stdout.String()
 	for _, want := range []string{"Server IP address or hostname [old.example.com]:", "SSH port [2222]:",
 		"User to log in as [ada]:", "SSH private key [~/.ssh/id_ed25519]:", "Your user on the server [ada]:",
-		"Port to move ssh to [2222]:", "Saved box (ada@new.example.com, port 2222)"} {
+		"Saved box (ada@new.example.com, port 2222)"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("output missing %q:\n%s", want, out)
 		}
 	}
 	if strings.Contains(out, "Name for this server") {
 		t.Errorf("asked for the name it was given:\n%s", out)
+	}
+	if strings.Contains(out, "Move ssh") {
+		t.Errorf("asked to move ssh to the port it's on:\n%s", out)
 	}
 	want := []config.Server{{Name: "box", Host: "new.example.com", Port: 2222, User: "ada", Key: key}}
 	if got := ta.servers(t); !slices.Equal(got, want) {
@@ -181,10 +186,11 @@ func TestSetupOldServer(t *testing.T) {
 	if err := os.WriteFile(path, []byte(`{"host": "box", "user": "root", "key": "`+key+`"}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	ta.typing("", "", "", "", "", "")
+	ta.typing("", "", "", "", "", "y")
 	ta.mustRun(t, "setup", "box")
-	if out := ta.stdout.String(); !strings.Contains(out, "SSH port [22]:") || !strings.Contains(out, "Port to move ssh to [23456]:") {
-		t.Errorf("output:\n%s", out)
+	if !strings.Contains(ta.stdout.String(), "SSH port [22]:") ||
+		!slices.Equal(scriptArgs(ta.sessions()[0]), []string{"start", "ada", "23456", "22"}) {
+		t.Errorf("output:\n%s", ta.stdout)
 	}
 }
 
@@ -213,7 +219,7 @@ func TestSetupFails(t *testing.T) {
 	ta := newTestApp(t, "0.1.0")
 	ta.withKey(t, "id_ed25519")
 	ta.onScript = func(string, []string, io.Writer) error { return exitWith(1) }
-	ta.typing("box", "", "", "", "", "", "")
+	ta.typing("box", "", "", "", "", "")
 	ta.mustFail(t, "setup.sh failed on box (exit status 1); the output above says why", "setup")
 	if len(ta.sessions()) != 1 {
 		t.Errorf("carried on after the first session failed: %q", ta.commands)
@@ -227,7 +233,7 @@ func TestSetupCantConnect(t *testing.T) {
 	ta := newTestApp(t, "0.1.0")
 	ta.withKey(t, "id_ed25519")
 	ta.onScript = func(string, []string, io.Writer) error { return exitWith(255) }
-	ta.typing("box.example.com", "", "", "", "", "", "")
+	ta.typing("box.example.com", "", "", "", "", "")
 	ta.mustFail(t, "ssh couldn't log in to root@box.example.com on port 22 (exit status 255). "+
 		"To change the address, port, user or key: rembox setup box.example.com", "setup")
 	// Saved before logging in, so it can be fixed with rembox setup NAME.
@@ -245,10 +251,27 @@ func TestSetupCantLogInOnNewPort(t *testing.T) {
 		}
 		return nil
 	}
-	ta.typing("box.example.com", "", "", "", "", "", "")
+	ta.typing("box.example.com", "", "", "", "", "", "y")
 	ta.mustFail(t, "ssh couldn't log in to ada@box.example.com on port 23456 (exit status 255). "+
 		"If box.example.com's cloud provider has a firewall, open port 23456/tcp in it, then run rembox setup box.example.com again", "setup")
+	if strings.Contains(ta.stdout.String(), "~/.ssh/config") {
+		t.Errorf("offered to change ~/.ssh/config before the server was set up:\n%s", ta.stdout)
+	}
 	// Saved with the new user and port, so running setup again tries them.
+	if got := ta.servers(t); len(got) != 1 || got[0].User != "ada" || got[0].Port != 23456 {
+		t.Errorf("saved %+v", got)
+	}
+}
+
+func TestSetupNotMoved(t *testing.T) {
+	ta := newTestApp(t, "0.1.0")
+	ta.withKey(t, "id_ed25519")
+	ta.typing("box.example.com", "", "", "", "", "", "n")
+	ta.mustFail(t, "ssh is on ports 22 and 23456 for now. To move it to port 23456: rembox setup box.example.com", "setup")
+	if len(ta.sessions()) != 1 {
+		t.Errorf("logged in on the new port after you said no: %q", ta.commands)
+	}
+	// Saved with the new user and port, so running setup again keeps them.
 	if got := ta.servers(t); len(got) != 1 || got[0].User != "ada" || got[0].Port != 23456 {
 		t.Errorf("saved %+v", got)
 	}
@@ -257,7 +280,7 @@ func TestSetupCantLogInOnNewPort(t *testing.T) {
 func TestSetupHostnameIsDefaultName(t *testing.T) {
 	ta := newTestApp(t, "0.1.0")
 	ta.withKey(t, "id_rsa")
-	ta.typing("Dev.Example.com", "", "ubuntu", "", "", "", "")
+	ta.typing("Dev.Example.com", "", "ubuntu", "", "", "", "y")
 	ta.mustRun(t, "setup")
 	if !strings.Contains(ta.stdout.String(), "Name for this server [dev.example.com]:") {
 		t.Errorf("output:\n%s", ta.stdout)
@@ -279,7 +302,6 @@ func TestSetupAsksAgain(t *testing.T) {
 		"", "~/.ssh/missing", "~/.ssh", "~/.ssh/work.pub", "~/.ssh/work", // key (no default)
 		"Box!", "box", // name
 		"root", "Ada", "ada", // your user
-		"22", "x", "", // new port: the one it logs in on, as that isn't 22
 	)
 
 	ta.mustRun(t, "setup")
@@ -292,7 +314,6 @@ func TestSetupAsksAgain(t *testing.T) {
 		`"ssh" isn't a port`, `"0" isn't a port`, `"65536" isn't a port`,
 		`"-u" isn't a user name`,
 		"pick a user other than root", `"Ada" can't be a user on the server`,
-		"pick a port other than 22", `"x" isn't a port`,
 		"ssh-keygen", "there's no file at", "is a folder", "is a public key",
 		`"Box!" can't be a name`,
 	} {
@@ -315,14 +336,14 @@ func TestSetupNameTaken(t *testing.T) {
 	}
 
 	// Declining to replace it asks for another name.
-	ta.typing("new", "", "", "", "box", "n", "box2", "", "")
+	ta.typing("new", "", "", "", "box", "n", "box2", "", "y")
 	ta.mustRun(t, "setup")
 	if got := ta.servers(t); len(got) != 2 || got[0].Host != "old" || got[1].Name != "box2" {
 		t.Errorf("saved %+v", got)
 	}
 
 	// Agreeing replaces it.
-	ta.typing("newer", "", "", "", "box", "y", "", "")
+	ta.typing("newer", "", "", "", "box", "y", "", "y")
 	ta.mustRun(t, "setup")
 	if got := ta.servers(t); len(got) != 2 || got[0].Host != "newer" {
 		t.Errorf("saved %+v", got)
@@ -333,7 +354,7 @@ func TestSetupNameTaken(t *testing.T) {
 
 	// The server as setup saved it doesn't ask: it's the same server.
 	ta.stdout.Reset()
-	ta.typing("newer", "23456", "ada", "", "box", "", "")
+	ta.typing("newer", "23456", "ada", "", "box", "")
 	ta.mustRun(t, "setup")
 	if strings.Contains(ta.stdout.String(), "Replace it?") {
 		t.Errorf("asked to replace the same server:\n%s", ta.stdout)
