@@ -1,6 +1,8 @@
-# Serves rembox.aakashns.com from public/. Set the root to where this repo's site/public is on the server.
+# Serves rembox.aakashns.com from this repo's site/public, cloned to /srv/rembox on the server.
+# Caddy runs as the caddy user, which can't get into /root or home folders (mode 700 or 750), so
+# the site must live outside them, or every path is a 403. See README.md for setting it up.
 rembox.aakashns.com {
-	root * /root/work/rembox/site/public
+	root * /srv/rembox/site/public
 	encode zstd gzip
 
 	header {
