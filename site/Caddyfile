@@ -1,5 +1,5 @@
-# Serves rembox.org from public/. Set the root to where this repo's site/public is on the server.
-rembox.org {
+# Serves rembox.aakashns.com from public/. Set the root to where this repo's site/public is on the server.
+rembox.aakashns.com {
 	root * /srv/rembox/site/public
 	encode zstd gzip
 
@@ -20,8 +20,4 @@ rembox.org {
 		rewrite * /404.html
 		file_server
 	}
-}
-
-www.rembox.org {
-	redir https://rembox.org{uri} permanent
 }

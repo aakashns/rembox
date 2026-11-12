@@ -122,7 +122,7 @@ func runImplode(a *App, args []string) error {
 		return fmt.Errorf("removing %s: %w", exe, err)
 	}
 	fmt.Fprintf(a.Stdout, "Removed %s\n", exe)
-	fmt.Fprintln(a.Stdout, "rembox is gone. To reinstall: curl -fsSL https://rembox.org/install.sh | sh")
+	fmt.Fprintln(a.Stdout, "rembox is gone. To reinstall: curl -fsSL https://rembox.aakashns.com/install.sh | sh")
 	return nil
 }
 

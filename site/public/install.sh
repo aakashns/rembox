@@ -1,7 +1,7 @@
 #!/bin/sh
 # Installs rembox (https://github.com/aakashns/rembox) on macOS or Linux:
 #
-#   curl -fsSL https://rembox.org/install.sh | sh
+#   curl -fsSL https://rembox.aakashns.com/install.sh | sh
 #
 # Downloads the latest release for this machine, checks it against the release's SHA256SUMS, and
 # installs it at /usr/local/bin/rembox, with sudo if that folder needs it. Running it again

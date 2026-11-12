@@ -11,14 +11,14 @@
       name="description"
       content="Turn a fresh Ubuntu server into a secure remote dev box, from your Mac."
     />
-    <link rel="canonical" href="https://rembox.org/" />
+    <link rel="canonical" href="https://rembox.aakashns.com/" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="rembox — Set up and manage remote development machines" />
     <meta
       property="og:description"
       content="Turn a fresh Ubuntu server into a secure remote dev box, from your Mac."
     />
-    <meta property="og:url" content="https://rembox.org/" />
+    <meta property="og:url" content="https://rembox.aakashns.com/" />
     <script src="/site.js" defer></script>
   </head>
   <body>
@@ -42,7 +42,7 @@
 
       <p>Run this on your Mac (or a Linux machine) to install rembox:</p>
       <div class="command">
-        <pre><code id="install-command">curl -fsSL https://rembox.org/install.sh | sh</code></pre>
+        <pre><code id="install-command">curl -fsSL https://rembox.aakashns.com/install.sh | sh</code></pre>
         <!-- Shown by site.js. -->
         <button type="button" id="copy" hidden aria-label="Copy install command">Copy</button>
       </div>
@@ -86,7 +86,8 @@
           <dt><code>REMBOX_INSTALL_DIR</code></dt>
           <dd>Installs in this folder instead of <code>/usr/local/bin</code>.</dd>
         </dl>
-        <pre class="block"><code>curl -fsSL https://rembox.org/install.sh | REMBOX_VERSION=0.1.0 sh</code></pre>
+        <pre class="block"><code>curl -fsSL https://rembox.aakashns.com/install.sh \
+  | REMBOX_VERSION=0.1.0 sh</code></pre>
         <p>
           Releases have a binary for macOS and Linux, on both Apple Silicon/ARM and Intel/AMD
           processors.

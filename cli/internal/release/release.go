@@ -33,8 +33,8 @@ import (
 	"github.com/aakashns/rembox/cli/internal/version"
 )
 
-// DefaultBaseURL is where releases are published. When releases move to
-// rembox.org, change this and install.sh together.
+// DefaultBaseURL is where releases are published. If that changes, change
+// install.sh too.
 const DefaultBaseURL = "https://github.com/aakashns/rembox/releases"
 
 // BaseURLEnv overrides DefaultBaseURL, so tests can point rembox and
