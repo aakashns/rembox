@@ -107,6 +107,17 @@ func Servers(dir string) (servers []Server, bad []error, err error) {
 	return servers, bad, nil
 }
 
+// LoadServer returns the server called name saved under dir. If there isn't
+// one, the error matches fs.ErrNotExist.
+func LoadServer(dir, name string) (Server, error) {
+	if err := CheckName(name); err != nil {
+		return Server{}, err
+	}
+	s, err := readServer(serverPath(dir, name))
+	s.Name = name
+	return s, err
+}
+
 func readServer(path string) (Server, error) {
 	var s Server
 	b, err := os.ReadFile(path)

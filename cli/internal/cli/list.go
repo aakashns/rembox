@@ -27,7 +27,7 @@ func runList(a *App, args []string) error {
 		return fmt.Errorf("reading your servers: %w", err)
 	}
 	for _, err := range bad {
-		fmt.Fprintf(a.Stderr, "rembox: skipping a server: %v\n", err)
+		fmt.Fprintln(a.Stderr, a.paintErr(yellow, fmt.Sprintf("rembox: skipping a server: %v", err)))
 	}
 	if len(servers) == 0 {
 		fmt.Fprintln(a.Stdout, "No servers yet. Run 'rembox setup' to add one.")

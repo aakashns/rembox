@@ -47,13 +47,14 @@ func TestSetupInteractive(t *testing.T) {
 	ta := newTestApp(t, "0.1.0")
 	key := ta.withKey(t, "id_ed25519")
 	ta.Interactive = true
-	// An IP address has no default name, so the name is typed; the key is
-	// the default.
-	ta.Stdin = strings.NewReader("203.0.113.10\n\nbox1\n")
+	// An IP address has no default name, so the name is typed; the user and
+	// key are the defaults.
+	ta.Stdin = strings.NewReader("203.0.113.10\n\n\nbox1\n")
 
 	ta.mustRun(t, "setup")
 	out := ta.stdout.String()
-	for _, want := range []string{"SSH private key [~/.ssh/id_ed25519]:", "Name for this server:", "Saved box1 (root@203.0.113.10)"} {
+	for _, want := range []string{"User to log in as [root]:", "SSH private key [~/.ssh/id_ed25519]:",
+		"Name for this server:", "Saved box1 (root@203.0.113.10)"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("output missing %q:\n%s", want, out)
 		}
@@ -68,7 +69,10 @@ func TestSetupInteractive(t *testing.T) {
 	if slices.Contains(ta.sshArgs, "BatchMode=yes") {
 		t.Error("ssh can't ask for the key's passphrase")
 	}
-	if !strings.Contains(out, "$ ssh -i "+key+" -o IdentitiesOnly=yes") {
+	if strings.Index(out, "User to log in as") > strings.Index(out, "SSH private key") {
+		t.Errorf("asked for the key before the user:\n%s", out)
+	}
+	if !strings.Contains(out, "\n\n$ ssh -i "+key+" -o IdentitiesOnly=yes") {
 		t.Errorf("output doesn't show the ssh command:\n%s", out)
 	}
 	info, err := os.Stat(filepath.Join(ta.configDir, "servers", "box1.json"))
@@ -91,7 +95,8 @@ func TestSetupHostnameIsDefaultName(t *testing.T) {
 	ta.Stdin = strings.NewReader("ubuntu@Dev.Example.com\n\n\n")
 
 	ta.mustRun(t, "setup")
-	if !strings.Contains(ta.stdout.String(), "Name for this server [dev.example.com]:") {
+	if !strings.Contains(ta.stdout.String(), "Name for this server [dev.example.com]:") ||
+		strings.Contains(ta.stdout.String(), "User to log in as") {
 		t.Errorf("output:\n%s", ta.stdout)
 	}
 	got := ta.servers(t)
@@ -107,6 +112,7 @@ func TestSetupAsksAgain(t *testing.T) {
 	ta.Interactive = true
 	ta.Stdin = strings.NewReader(strings.Join([]string{
 		"", "-oProxyCommand=evil", "box.example.com", // host
+		"-u", "deploy", // user
 		"", "~/.ssh/missing", "~/.ssh", "~/.ssh/work.pub", "~/.ssh/work", // key (no default)
 		"Box!", "box", // name
 	}, "\n") + "\n")
@@ -116,6 +122,7 @@ func TestSetupAsksAgain(t *testing.T) {
 	for _, want := range []string{
 		"enter the server's IP address or hostname",
 		`"-oProxyCommand=evil" isn't an IP address or hostname`,
+		`"-u" isn't a user name`,
 		"ssh-keygen", "there's no file at", "is a folder", "is a public key",
 		`"Box!" can't be a name`,
 	} {
@@ -123,7 +130,7 @@ func TestSetupAsksAgain(t *testing.T) {
 			t.Errorf("output missing %q:\n%s", want, out)
 		}
 	}
-	if got := ta.servers(t); len(got) != 1 || got[0].Name != "box" || got[0].Key != key {
+	if got := ta.servers(t); len(got) != 1 || got[0].Name != "box" || got[0].User != "deploy" || got[0].Key != key {
 		t.Errorf("saved %+v", got)
 	}
 }
@@ -153,7 +160,11 @@ func TestSetupFlags(t *testing.T) {
 	}
 
 	ta.mustRun(t, "setup", "--host", "admin@10.0.0.5", "--key", key, "--name", "lab")
-	want := []config.Server{{Name: "lab", Host: "10.0.0.5", User: "admin", Key: key}}
+	ta.mustRun(t, "setup", "--host", "10.0.0.6", "--user", "admin", "--key", key, "--name", "lab2")
+	want := []config.Server{
+		{Name: "lab", Host: "10.0.0.5", User: "admin", Key: key},
+		{Name: "lab2", Host: "10.0.0.6", User: "admin", Key: key},
+	}
 	if got := ta.servers(t); !slices.Equal(got, want) {
 		t.Errorf("saved %+v, want %+v", got, want)
 	}
@@ -171,6 +182,8 @@ func TestSetupNonInteractiveMissing(t *testing.T) {
 		{[]string{"setup", "--host", "box.example.com"}, "pass --key"}, // no keys in ~/.ssh
 		{[]string{"setup", "--host", "10.0.0.5", "--key", "/etc/hosts"}, "pass --name"},
 		{[]string{"setup", "--host", "box", "--key", "/nonexistent"}, "--key: there's no file"},
+		{[]string{"setup", "--host", "box", "--user", "-x", "--key", "/etc/hosts"}, `--user: "-x" isn't a user name`},
+		{[]string{"setup", "--host", "a@box", "--user", "b", "--key", "/etc/hosts"}, "give just one"},
 	} {
 		ta := newTestApp(t, "0.1.0")
 		if code := ta.Run(tc.args); code != 1 {
@@ -202,14 +215,14 @@ func TestSetupNameTaken(t *testing.T) {
 
 	// Declining to replace it asks for another name.
 	ta.Interactive = true
-	ta.Stdin = strings.NewReader("new\n\nbox\nn\nbox2\n")
+	ta.Stdin = strings.NewReader("new\n\n\nbox\nn\nbox2\n")
 	ta.mustRun(t, "setup")
 	if got := ta.servers(t); len(got) != 2 || got[0].Host != "old" || got[1].Name != "box2" {
 		t.Errorf("saved %+v", got)
 	}
 
 	// Agreeing replaces it.
-	ta.Stdin = strings.NewReader("newer\n\nbox\ny\n")
+	ta.Stdin = strings.NewReader("newer\n\n\nbox\ny\n")
 	ta.in = nil
 	ta.mustRun(t, "setup")
 	if got := ta.servers(t); len(got) != 2 || got[0].Host != "newer" {
@@ -271,10 +284,10 @@ func TestShellQuote(t *testing.T) {
 
 func TestCheckDestination(t *testing.T) {
 	for in, want := range map[string]string{
-		"203.0.113.10":           "root@203.0.113.10",
-		"box.example.com":        "root@box.example.com",
+		"203.0.113.10":           "203.0.113.10",
+		"box.example.com":        "box.example.com",
 		"ubuntu@box":             "ubuntu@box",
-		"[2001:db8::1]":          "root@2001:db8::1",
+		"[2001:db8::1]":          "2001:db8::1",
 		"deploy@2001:db8::1":     "deploy@2001:db8::1",
 		"":                       "",
 		"box example":            "",

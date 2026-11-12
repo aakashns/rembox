@@ -125,7 +125,7 @@ func runImplode(a *App, args []string) error {
 		}
 		fmt.Fprintf(a.Stdout, "Removed %s\n", dir)
 	}
-	fmt.Fprintln(a.Stdout, "rembox is gone. To reinstall: curl -fsSL https://rembox.aakashns.com/install.sh | sh")
+	fmt.Fprintln(a.Stdout, a.paint(green, "rembox is gone.")+" To reinstall: curl -fsSL https://rembox.aakashns.com/install.sh | sh")
 	return nil
 }
 

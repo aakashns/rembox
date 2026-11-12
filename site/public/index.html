@@ -49,23 +49,28 @@
       <p id="copy-status" class="sr-only" role="status"></p>
 
       <p class="callout">
-        <strong>Early days.</strong> So far rembox adds and lists servers, and installs, upgrades and
-        removes itself. Setting up servers comes next, and this page will document each step as it
-        lands.
+        <strong>Early days.</strong> So far rembox adds, lists and logs in to servers, and installs,
+        upgrades and removes itself. Setting up servers comes next, and this page will document each
+        step as it lands.
       </p>
 
       <section aria-labelledby="commands">
         <h2 id="commands">Commands</h2>
         <dl class="commands">
-          <dt><code>rembox setup [--host HOST] [--key PATH] [--name NAME]</code></dt>
+          <dt><code>rembox setup [--host HOST] [--user USER] [--key PATH] [--name NAME]</code></dt>
           <dd>
-            Adds a server. Asks for its IP address or hostname, the SSH key to log in with, and a
-            name for it (its hostname, by default), then checks that ssh can log in and saves it.
-            rembox logs in as root unless you give a user, as in <code>ubuntu@203.0.113.10</code>.
-            Flags answer the questions up front, e.g. in a script.
+            Adds a server. Asks for its IP address or hostname, the user to log in as (root, by
+            default), the SSH key to log in with, and a name for it (its hostname, by default), then
+            checks that ssh can log in and saves it. You can also give the user with the host, as in
+            <code>ubuntu@203.0.113.10</code>. Flags answer the questions up front, e.g. in a script.
           </dd>
           <dt><code>rembox list</code></dt>
           <dd>Lists the servers you’ve added, with the user, host and key rembox logs in with.</dd>
+          <dt><code>rembox ssh [NAME] [COMMAND...]</code></dt>
+          <dd>
+            Logs in to a server you’ve added, as its user and with its key, or runs a command on it.
+            You can leave out the name if you’ve added just one server.
+          </dd>
           <dt><code>rembox help [command]</code></dt>
           <dd>Lists the commands, or explains one of them.</dd>
           <dt><code>rembox version</code></dt>
