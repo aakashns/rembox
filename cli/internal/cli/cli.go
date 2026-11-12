@@ -12,7 +12,6 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
-	"time"
 
 	"github.com/aakashns/rembox/cli/internal/config"
 	"github.com/aakashns/rembox/cli/internal/release"
@@ -20,14 +19,13 @@ import (
 )
 
 // App is one invocation of rembox, with everything it touches outside itself
-// made explicit so tests can substitute it.
+// made explicit so tests can substitute it. rembox always runs at a terminal,
+// where it asks its questions.
 type App struct {
-	Stdin       io.Reader
-	Stdout      io.Writer
-	Stderr      io.Writer
-	Interactive bool // stdin is a terminal, so we can ask questions
-	Color       bool // color Stdout's output
-	ErrColor    bool // color Stderr's output
+	Stdin  io.Reader
+	Stdout io.Writer
+	Stderr io.Writer
+	Color  bool // color the output
 
 	Releases   *release.Client
 	Executable func() (string, error) // path of the running binary
@@ -35,18 +33,12 @@ type App struct {
 	GOARCH     string
 
 	ConfigDir func() (string, error) // where rembox keeps its files
-	HomeDir   func() (string, error) // for ~/.ssh, and where implode puts backups
-	Now       func() time.Time       // for backups' names
+	HomeDir   func() (string, error) // for ~/.ssh
 
-	// Command runs a program at the terminal. Run commands with App.run,
-	// which shows them first.
-	Command func(name string, args ...string) error
-	// Pipe runs a program with the given stdin (nil for none), stdout and
-	// stderr, as for sending a script to ssh and reading what it prints. Show
-	// the command first, as App.run does.
-	Pipe  func(stdin io.Reader, stdout, stderr io.Writer, name string, args ...string) error
-	Sleep func(time.Duration)
-	Euid  int // 0 when run as root
+	// Command runs a program at the terminal, with its output going to stdout.
+	// Show the command first, as App.run does.
+	Command func(stdout io.Writer, name string, args ...string) error
+	Euid    int // 0 when run as root
 
 	in *bufio.Reader // Stdin, shared by every question
 }
@@ -54,41 +46,27 @@ type App struct {
 // Main runs rembox with the process's arguments and returns its exit code.
 func Main() int {
 	app := &App{
-		Stdin:       os.Stdin,
-		Stdout:      os.Stdout,
-		Stderr:      os.Stderr,
-		Interactive: isTerminal(os.Stdin),
-		Color:       useColor(os.Stdout),
-		ErrColor:    useColor(os.Stderr),
-		Releases:    release.NewClient(),
-		Executable:  os.Executable,
-		GOOS:        runtime.GOOS,
-		GOARCH:      runtime.GOARCH,
-		ConfigDir:   config.Dir,
-		HomeDir:     os.UserHomeDir,
-		Now:         time.Now,
-		Command:     atTerminal,
-		Pipe:        piped,
-		Sleep:       time.Sleep,
-		Euid:        os.Geteuid(),
+		Stdin:      os.Stdin,
+		Stdout:     os.Stdout,
+		Stderr:     os.Stderr,
+		Color:      useColor(),
+		Releases:   release.NewClient(),
+		Executable: os.Executable,
+		GOOS:       runtime.GOOS,
+		GOARCH:     runtime.GOARCH,
+		ConfigDir:  config.Dir,
+		HomeDir:    os.UserHomeDir,
+		Command:    atTerminal,
+		Euid:       os.Geteuid(),
 	}
 	return app.Run(os.Args[1:])
 }
 
-// atTerminal runs a command with rembox's stdin, stdout and stderr, so it can
-// ask the user things itself.
-func atTerminal(name string, args ...string) error {
+// atTerminal runs a command with rembox's stdin and stderr, so it can ask the
+// user things itself, and the given stdout.
+func atTerminal(stdout io.Writer, name string, args ...string) error {
 	cmd := exec.Command(name, args...)
-	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
-	return cmd.Run()
-}
-
-// piped runs a command with the given stdin, stdout and stderr. Programs it
-// runs can still ask things at the terminal, as ssh does for a key's
-// passphrase.
-func piped(stdin io.Reader, stdout, stderr io.Writer, name string, args ...string) error {
-	cmd := exec.Command(name, args...)
-	cmd.Stdin, cmd.Stdout, cmd.Stderr = stdin, stdout, stderr
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, stdout, os.Stderr
 	return cmd.Run()
 }
 
@@ -97,27 +75,21 @@ func piped(stdin io.Reader, stdout, stderr io.Writer, name string, args ...strin
 // machines.
 func (a *App) run(name string, args ...string) error {
 	a.showCommand(name, args)
-	return a.Command(name, args...)
+	return a.Command(a.Stdout, name, args...)
 }
 
 // errDeclined means the user chose not to run a command.
 var errDeclined = errors.New("cancelled")
 
 // runConfirmed is run for sensitive or destructive commands: it shows the
-// command, then asks before running it. If yes (from --yes), it doesn't ask.
-// It returns errDeclined if the answer is no.
-func (a *App) runConfirmed(yes bool, name string, args ...string) error {
+// command, then asks before running it. It returns errDeclined if the answer
+// is no.
+func (a *App) runConfirmed(name string, args ...string) error {
 	a.showCommand(name, args)
-	if !yes {
-		ok, err := a.confirm("Run this command?", false)
-		if err != nil {
-			return err
-		}
-		if !ok {
-			return errDeclined
-		}
+	if !a.confirm("Run this command?", false) {
+		return errDeclined
 	}
-	return a.Command(name, args...)
+	return a.Command(a.Stdout, name, args...)
 }
 
 func (a *App) showCommand(name string, args []string) {
@@ -144,15 +116,10 @@ func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
-func isTerminal(f *os.File) bool {
-	info, err := f.Stat()
-	return err == nil && info.Mode()&os.ModeCharDevice != 0
-}
-
-// useColor says whether to color what rembox writes to f: only at a terminal
-// that can show color, and not if NO_COLOR is set (https://no-color.org).
-func useColor(f *os.File) bool {
-	return isTerminal(f) && os.Getenv("NO_COLOR") == "" && os.Getenv("TERM") != "dumb"
+// useColor says whether to color rembox's output: unless the terminal can't
+// show color, or NO_COLOR is set (https://no-color.org).
+func useColor() bool {
+	return os.Getenv("NO_COLOR") == "" && os.Getenv("TERM") != "dumb"
 }
 
 // ANSI styles for paint.
@@ -165,14 +132,9 @@ const (
 	cyan   = "36"
 )
 
-// paint styles s for Stdout, if it's in color.
-func (a *App) paint(style, s string) string { return paint(a.Color, style, s) }
-
-// paintErr styles s for Stderr, if it's in color.
-func (a *App) paintErr(style, s string) string { return paint(a.ErrColor, style, s) }
-
-func paint(on bool, style, s string) string {
-	if !on {
+// paint styles s, if the output is in color.
+func (a *App) paint(style, s string) string {
+	if !a.Color {
 		return s
 	}
 	return "\x1b[" + style + "m" + s + "\x1b[0m"
@@ -346,7 +308,7 @@ func (a *App) fail(err error, cmdName string) int {
 	if errors.As(err, &es) {
 		return int(es)
 	}
-	fmt.Fprintln(a.Stderr, a.paintErr(red, fmt.Sprintf("rembox: %v", err)))
+	fmt.Fprintln(a.Stderr, a.paint(red, fmt.Sprintf("rembox: %v", err)))
 	var ue *usageError
 	if errors.As(err, &ue) {
 		if cmdName == "help" {
@@ -414,31 +376,22 @@ func runVersion(a *App, args []string) error {
 	return nil
 }
 
-// errNoTerminal means a question was needed but there's no one to answer it.
-var errNoTerminal = errors.New("can't ask for confirmation without a terminal; re-run with --yes to proceed")
-
 // confirm asks a yes/no question. An empty answer (or end of input) means
 // def; anything else but y/yes means no.
-func (a *App) confirm(question string, def bool) (bool, error) {
-	if !a.Interactive {
-		return false, errNoTerminal
-	}
+func (a *App) confirm(question string, def bool) bool {
 	hint := "[y/N]"
 	if def {
 		hint = "[Y/n]"
 	}
 	fmt.Fprintf(a.Stdout, "%s %s ", a.paint(bold, question), hint)
-	line, ok := a.readLine()
-	if !ok {
-		return def, nil
-	}
+	line, _ := a.readLine()
 	switch strings.ToLower(line) {
 	case "":
-		return def, nil
+		return def
 	case "y", "yes":
-		return true, nil
+		return true
 	}
-	return false, nil
+	return false
 }
 
 // ask asks a question and returns the answer, or def if it's empty. The end

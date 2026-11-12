@@ -1,7 +1,7 @@
 // Package remote holds the scripts rembox runs on servers, and reads what
 // they report.
 //
-// rembox sends a script to `bash -s` over ssh, so nothing is copied to the
+// rembox runs a script with `bash -c` over ssh, so nothing is copied to the
 // server. Each script is lib.sh followed by the script itself.
 package remote
 
@@ -65,8 +65,7 @@ type Machine struct {
 	UID                     int
 	Sudo                    bool // the server has sudo, to become root with
 	APT, Systemd            bool
-	RebootRequired          bool   // an update needs a restart to take effect
-	BootID                  string // changes every time the server starts
+	RebootRequired          bool // an update needs a restart to take effect
 }
 
 // Parse reads Probe's output: "fact NAME=VALUE" lines. Other lines (like any
@@ -107,7 +106,6 @@ func Parse(out string) (Machine, error) {
 	m.DiskKB, m.DiskFreeKB = num("disk_kb"), num("disk_free_kb")
 	m.User, m.UID = str("user"), int(num("uid"))
 	m.Sudo, m.APT, m.Systemd, m.RebootRequired = yes("sudo"), yes("apt"), yes("systemd"), yes("reboot_required")
-	m.BootID = str("boot_id")
 	if len(missing) > 0 {
 		return m, fmt.Errorf("the server didn't report its %s", strings.Join(missing, ", "))
 	}

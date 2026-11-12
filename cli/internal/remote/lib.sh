@@ -1,9 +1,8 @@
-# lib.sh: what every rembox script starts with. rembox sends lib.sh followed by
-# a script to `bash -s` on the server, as one script.
+# lib.sh: what every rembox script starts with. rembox runs lib.sh followed by
+# a script with `bash -c` on the server, as one script.
 #
-# Each script defines main and ends with `main "$@" </dev/null`, so bash reads
-# all of it before running any of it, and no command can read the rest of the
-# script from stdin by mistake.
+# Each script defines main and ends with `main "$@" </dev/null`, so no command
+# in it stops to read input.
 #
 # rembox passes --color when your terminal shows color.
 

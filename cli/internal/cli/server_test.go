@@ -37,54 +37,34 @@ func (ta *testApp) wantOutput(t *testing.T, wants ...string) {
 	}
 }
 
-// restartingServer fakes a server that needs a restart after its updates. It
-// comes back with a new boot ID after down probes of it fail.
-func (ta *testApp) restartingServer(down int, rebootErr error) {
-	updated, rebooted := false, false
-	ta.onPipe = func(script string, args []string, stdout io.Writer) error {
-		switch {
-		case script == "update.sh":
+// needsRestart fakes a server that needs a restart after its updates, whose
+// probe reports facts(overrides...). The reboot returns rebootErr.
+func (ta *testApp) needsRestart(rebootErr error, overrides ...string) {
+	updated := false
+	ta.onScript = func(script string, args []string, stdout io.Writer) error {
+		if script == "update.sh" {
 			updated = true
-		case script == "probe.sh" && rebooted:
-			fmt.Fprint(stdout, facts("boot_id=boot-2"))
-		case script == "probe.sh" && updated:
-			fmt.Fprint(stdout, facts("reboot_required=yes"))
-		case script == "probe.sh":
-			fmt.Fprint(stdout, facts())
-		case args[len(args)-1] == "/proc/sys/kernel/random/boot_id":
-			if down > 0 {
-				down--
-				return exitWith(255)
-			}
-			fmt.Fprintln(stdout, "boot-2")
-		default:
-			return fmt.Errorf("the tests don't fake ssh %q", args)
+		} else if updated {
+			fmt.Fprint(stdout, facts(append(overrides, "reboot_required=yes")...))
+		} else {
+			fmt.Fprint(stdout, facts(overrides...))
 		}
 		return nil
 	}
-	ta.sshErr = nil
-	reboot := func(args []string) bool { return slices.Equal(args[len(args)-2:], []string{"systemctl", "reboot"}) }
-	// Command runs the ssh for the login check, the reboot, and the updates
-	// with sudo.
 	inner := ta.Command
-	ta.Command = func(name string, args ...string) error {
-		if slices.Contains(args, shellQuote(remote.Update.Body)) {
-			updated = true
-		}
-		if name == "ssh" && reboot(args) {
-			rebooted = true
-			ta.commands = append(ta.commands, append([]string{name}, args...))
+	ta.Command = func(stdout io.Writer, name string, args ...string) error {
+		err := inner(stdout, name, args...)
+		if name == "ssh" && slices.Equal(args[len(args)-2:], []string{"systemctl", "reboot"}) {
 			return rebootErr
 		}
-		return inner(name, args...)
+		return err
 	}
 }
 
 func TestSetupDeclineUpdates(t *testing.T) {
 	ta := newTestApp(t, "0.1.0")
 	ta.withKey(t, "id_ed25519")
-	ta.Interactive = true
-	ta.Stdin = strings.NewReader("box\n\n\n\nn\n")
+	ta.typing("box", "", "", "", "n")
 	ta.mustRun(t, "setup")
 	ta.wantOutput(t, "Skipped installing updates. To install them later, run rembox setup again.")
 	if !slices.Equal(ta.scripts, []string{"probe.sh"}) {
@@ -96,7 +76,8 @@ func TestSetupUnsupported(t *testing.T) {
 	ta := newTestApp(t, "0.1.0")
 	ta.withKey(t, "id_ed25519")
 	ta.probeOut = facts("os_id=fedora", "os_name=Fedora Linux 44", "apt=no", "arch=riscv64", "user=dev", "uid=1000", "sudo=no")
-	ta.mustFail(t, "can't set up box yet", "setup", "--host", "box", "--yes")
+	ta.typing("box", "", "", "")
+	ta.mustFail(t, "can't set up box yet", "setup")
 	ta.wantOutput(t, "this one runs Fedora Linux 44", "no apt-get", "Its processor is riscv64",
 		"rembox logged in as dev")
 	if !slices.Equal(ta.scripts, []string{"probe.sh"}) {
@@ -110,59 +91,44 @@ func TestSetupUnsupported(t *testing.T) {
 func TestSetupUpdateFails(t *testing.T) {
 	ta := newTestApp(t, "0.1.0")
 	ta.withKey(t, "id_ed25519")
-	ta.onPipe = func(script string, args []string, stdout io.Writer) error {
+	ta.onScript = func(script string, args []string, stdout io.Writer) error {
 		if script == "update.sh" {
 			return exitWith(100)
 		}
 		fmt.Fprint(stdout, facts())
 		return nil
 	}
-	ta.mustFail(t, "update.sh failed on box (exit status 100); the output above says why", "setup", "--host", "box", "--yes")
+	ta.typing("box", "", "", "", "")
+	ta.mustFail(t, "update.sh failed on box (exit status 100); the output above says why", "setup")
 }
 
 func TestSetupCantConnect(t *testing.T) {
 	ta := newTestApp(t, "0.1.0")
 	ta.withKey(t, "id_ed25519")
-	ta.onPipe = func(string, []string, io.Writer) error { return exitWith(255) }
-	ta.mustFail(t, "ssh couldn't connect to root@box", "setup", "--host", "box", "--yes")
+	ta.onScript = func(string, []string, io.Writer) error { return exitWith(255) }
+	ta.typing("box", "", "", "")
+	ta.mustFail(t, "ssh couldn't connect to root@box", "setup")
 }
 
 func TestSetupRestarts(t *testing.T) {
 	ta := newTestApp(t, "0.1.0")
 	ta.withKey(t, "id_ed25519")
-	ta.restartingServer(2, exitWith(255)) // ssh loses the connection as the server shuts down
-	ta.mustRun(t, "setup", "--host", "box", "--yes")
+	ta.needsRestart(exitWith(255)) // ssh loses the connection as the server shuts down
+	ta.typing("box", "", "", "", "", "y")
+	ta.mustRun(t, "setup")
 	ta.wantOutput(t, "box needs to restart to finish the updates",
-		"root@box systemctl reboot\n", "Waiting for box to start again",
-		"root@box cat /proc/sys/kernel/random/boot_id\n", "box has restarted", "box is set up")
-	if strings.Contains(ta.stdout.String(), "Run this command?") {
-		t.Error("asked, despite --yes")
-	}
-	if ta.sleeps != 3 {
-		t.Errorf("checked %d times, want 3", ta.sleeps)
-	}
-}
-
-func TestSetupRestartTimesOut(t *testing.T) {
-	ta := newTestApp(t, "0.1.0")
-	ta.withKey(t, "id_ed25519")
-	ta.restartingServer(1000, nil)
-	ta.mustFail(t, "box didn't start again within 5m0s", "setup", "--host", "box", "--yes")
-	if ta.sleeps != 60 {
-		t.Errorf("checked %d times, want 60", ta.sleeps)
-	}
+		"-- root@box systemctl reboot\nRun this command? [y/N]", "box is restarting", "box is set up")
 }
 
 func TestSetupRestartDeclined(t *testing.T) {
 	ta := newTestApp(t, "0.1.0")
 	ta.withKey(t, "id_ed25519")
-	ta.restartingServer(0, nil)
-	ta.Interactive = true
-	ta.Stdin = strings.NewReader("box\n\n\n\ny\nn\n")
+	ta.needsRestart(nil)
+	ta.typing("box", "", "", "", "", "n")
 	ta.mustRun(t, "setup")
 	ta.wantOutput(t, "Run this command? [y/N]", "Not restarted. To restart box later: rembox ssh box systemctl reboot")
-	if ta.sleeps != 0 {
-		t.Error("waited for a restart that didn't happen")
+	if strings.Contains(ta.stdout.String(), "box is restarting") {
+		t.Error("restarted after being told not to")
 	}
 }
 
@@ -170,48 +136,35 @@ func TestSetupWithSudo(t *testing.T) {
 	ta := newTestApp(t, "0.1.0")
 	ta.withKey(t, "id_ed25519")
 	ta.probeOut = facts("user=dev", "uid=1000")
-	ta.Interactive, ta.Color = true, true
-	ta.Stdin = strings.NewReader("box\ndev\n\n\n\n")
+	ta.Color = true
+	ta.typing("box", "dev", "", "", "")
 	ta.mustRun(t, "setup")
 	ta.wantOutput(t, "rembox logged in as dev, so it runs the script with sudo, which may ask for dev's password",
-		`-t -- dev@box sudo bash -c "$(cat update.sh)" bash --color`)
+		`-- dev@box sudo bash -c "$(cat update.sh)" bash --color`)
 
-	// The script goes in the command, quoted, so sudo can ask for the
-	// password at the terminal.
-	i := slices.Index(ta.sshArgs, "-c")
-	if i < 0 || !slices.Contains(ta.sshArgs, "-t") || ta.sshArgs[i-2] != "sudo" ||
-		ta.sshArgs[i+1] != shellQuote(remote.Update.Body) || !slices.Equal(ta.sshArgs[i+2:], []string{"bash", "--color"}) {
-		t.Errorf("ssh args %q", ta.sshArgs)
+	// The script goes in the command, quoted, and ssh runs it at a terminal,
+	// so sudo can ask for the password.
+	update := ta.commands[slices.IndexFunc(ta.commands, func(c []string) bool { return scriptIn(c) == "update.sh" })]
+	i := slices.Index(update, "-c")
+	if i < 0 || update[1] != "-t" || update[i-2] != "sudo" ||
+		update[i+1] != shellQuote(remote.Update.Body) || !slices.Equal(update[i+2:], []string{"bash", "--color"}) {
+		t.Errorf("ssh args %q", update)
 	}
 	// The probe needs no root.
-	if !slices.Equal(ta.scripts, []string{"probe.sh", "probe.sh"}) {
-		t.Errorf("sent %q", ta.scripts)
-	}
-
-	// Without a terminal, sudo can't ask.
-	ta.Interactive = false
-	ta.mustRun(t, "setup", "--host", "box", "--user", "dev", "--yes")
-	if i := slices.Index(ta.sshArgs, "sudo"); i < 0 || ta.sshArgs[i+1] != "-n" || slices.Contains(ta.sshArgs, "-t") {
-		t.Errorf("ssh args %q", ta.sshArgs)
+	for _, c := range ta.commands {
+		if slices.Contains(c, shellQuote(remote.Probe.Body)) && slices.Contains(c, "sudo") {
+			t.Errorf("probed with sudo: %q", c)
+		}
 	}
 }
 
 func TestSetupRestartsWithSudo(t *testing.T) {
 	ta := newTestApp(t, "0.1.0")
 	ta.withKey(t, "id_ed25519")
-	ta.restartingServer(0, nil)
-	inner := ta.onPipe
-	ta.onPipe = func(script string, args []string, stdout io.Writer) error {
-		if script == "probe.sh" {
-			var b strings.Builder
-			inner(script, args, &b)
-			fmt.Fprint(stdout, strings.Replace(b.String(), "fact uid=0", "fact uid=1000", 1))
-			return nil
-		}
-		return inner(script, args, stdout)
-	}
-	ta.mustRun(t, "setup", "--host", "box", "--yes")
-	ta.wantOutput(t, "-- root@box sudo -n systemctl reboot\n", "box has restarted")
+	ta.needsRestart(nil, "user=dev", "uid=1000")
+	ta.typing("box", "dev", "", "", "", "n")
+	ta.mustRun(t, "setup")
+	ta.wantOutput(t, "-- dev@box sudo systemctl reboot\n", "rembox ssh box sudo systemctl reboot")
 }
 
 func TestInfo(t *testing.T) {
@@ -219,7 +172,7 @@ func TestInfo(t *testing.T) {
 	ta.withServers(t, "a")
 	ta.probeOut = facts("swap_kb=4194304", "virt=none", "reboot_required=yes")
 	ta.mustRun(t, "info", "a")
-	ta.wantOutput(t, "dev@a.example.com bash -s < probe.sh\n", "System        Ubuntu 26.04.1 LTS",
+	ta.wantOutput(t, `dev@a.example.com bash -c "$(cat probe.sh)" bash`, "System        Ubuntu 26.04.1 LTS",
 		"3.7 GiB, and 4.0 GiB of swap", "Runs on       its own hardware", "needed, to finish installing updates",
 		"rembox can set up this server.")
 

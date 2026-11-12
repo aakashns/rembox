@@ -80,7 +80,7 @@ func TestSSHExitStatus(t *testing.T) {
 func TestColor(t *testing.T) {
 	ta := newTestApp(t, "0.1.0")
 	ta.withServers(t, "a")
-	ta.Color, ta.ErrColor = true, true
+	ta.Color = true
 	ta.mustRun(t, "ssh", "a")
 	if !strings.Contains(ta.stdout.String(), "\n\x1b[36m$ ssh ") {
 		t.Errorf("command isn't in color: %q", ta.stdout)

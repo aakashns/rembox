@@ -43,27 +43,12 @@ func (ta *testApp) mustRun(t *testing.T, args ...string) {
 	}
 }
 
-// withShortConfigDir moves rembox's folder somewhere short enough for ssh's
-// sockets, as most people's ~/.config/rembox is (but the tests' isn't, on
-// macOS).
-func (ta *testApp) withShortConfigDir(t *testing.T) {
-	t.Helper()
-	dir, err := os.MkdirTemp("/tmp", "rb")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.RemoveAll(dir) })
-	ta.configDir = filepath.Join(dir, "rembox")
-}
-
-func TestSetupInteractive(t *testing.T) {
+func TestSetup(t *testing.T) {
 	ta := newTestApp(t, "0.1.0")
-	ta.withShortConfigDir(t)
 	key := ta.withKey(t, "id_ed25519")
-	ta.Interactive = true
 	// An IP address has no default name, so the name is typed; the user and
 	// key are the defaults, and so is installing updates.
-	ta.Stdin = strings.NewReader("203.0.113.10\n\n\nbox1\n\n")
+	ta.typing("203.0.113.10", "", "", "box1", "")
 
 	ta.mustRun(t, "setup")
 	out := ta.stdout.String()
@@ -85,23 +70,10 @@ func TestSetupInteractive(t *testing.T) {
 	if !slices.Contains(ta.sshArgs, "root@203.0.113.10") || !slices.Contains(ta.sshArgs, key) {
 		t.Errorf("ssh args %q", ta.sshArgs)
 	}
-	if slices.Contains(ta.sshArgs, "BatchMode=yes") {
-		t.Error("ssh can't ask for the key's passphrase")
-	}
 	if want := []string{"probe.sh", "update.sh", "probe.sh"}; !slices.Equal(ta.scripts, want) {
 		t.Errorf("ran %q, want %q", ta.scripts, want)
 	}
-	// Every ssh command shares one connection, through a socket in rembox's folder.
-	sockets := filepath.Join(ta.configDir, "ssh")
-	for _, c := range ta.commands {
-		if !slices.Contains(c, "ControlPath="+filepath.Join(sockets, "%C")) {
-			t.Errorf("doesn't share the connection: %q", c)
-		}
-	}
-	if info, err := os.Stat(sockets); err != nil || info.Mode().Perm() != 0o700 {
-		t.Errorf("sockets folder: %v, %v", info, err)
-	}
-	if !strings.Contains(out, "\n$ ssh -i "+key) || !strings.Contains(out, "root@203.0.113.10 bash -s < probe.sh\n"+
+	if !strings.Contains(out, "\n$ ssh -i "+key) || !strings.Contains(out, `root@203.0.113.10 bash -c "$(cat probe.sh)" bash`+"\n"+
 		"  probe.sh comes with rembox; read it at https://github.com/aakashns/rembox/blob/v0.1.0/cli/internal/remote/probe.sh\n") {
 		t.Errorf("output doesn't show the script's command:\n%s", out)
 	}
@@ -127,9 +99,8 @@ func TestSetupInteractive(t *testing.T) {
 func TestSetupHostnameIsDefaultName(t *testing.T) {
 	ta := newTestApp(t, "0.1.0")
 	ta.withKey(t, "id_rsa")
-	ta.Interactive = true
 	ta.probeOut = facts("user=ubuntu", "uid=1000", "sudo=no")
-	ta.Stdin = strings.NewReader("Dev.Example.com\nubuntu\n\n\n")
+	ta.typing("Dev.Example.com", "ubuntu", "", "")
 
 	// Saved, though rembox can't set it up as ubuntu without sudo.
 	if code := ta.Run([]string{"setup"}); code != 1 {
@@ -148,14 +119,13 @@ func TestSetupHostnameIsDefaultName(t *testing.T) {
 func TestSetupAsksAgain(t *testing.T) {
 	ta := newTestApp(t, "0.1.0")
 	key := ta.withKey(t, "work")
-	ta.Interactive = true
-	ta.Stdin = strings.NewReader(strings.Join([]string{
+	ta.typing(
 		"", "-oProxyCommand=evil", "deploy@box.example.com", "box.example.com", // host
 		"-u", "deploy", // user
 		"", "~/.ssh/missing", "~/.ssh", "~/.ssh/work.pub", "~/.ssh/work", // key (no default)
 		"Box!", "box", // name
 		"", // install updates
-	}, "\n") + "\n")
+	)
 
 	ta.mustRun(t, "setup")
 	out := ta.stdout.String()
@@ -180,8 +150,9 @@ func TestSetupSSHFails(t *testing.T) {
 	ta := newTestApp(t, "0.1.0")
 	ta.withKey(t, "id_ed25519")
 	ta.sshErr = errors.New("exit status 255")
+	ta.typing("box.example.com", "", "", "")
 
-	if code := ta.Run([]string{"setup", "--host", "box.example.com"}); code != 1 {
+	if code := ta.Run([]string{"setup"}); code != 1 {
 		t.Fatalf("exit %d, want 1", code)
 	}
 	if !strings.Contains(ta.stderr.String(), "couldn't log in to root@box.example.com") ||
@@ -196,79 +167,6 @@ func TestSetupSSHFails(t *testing.T) {
 	}
 }
 
-func TestSetupFlags(t *testing.T) {
-	ta := newTestApp(t, "0.1.0")
-	key := filepath.Join(t.TempDir(), "key")
-	if err := os.WriteFile(key, []byte("private\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	ta.mustRun(t, "setup", "--host", "10.0.0.5", "--user", "admin", "--key", key, "--name", "lab", "--yes")
-	want := []config.Server{{Name: "lab", Host: "10.0.0.5", User: "admin", Key: key}}
-	if got := ta.servers(t); !slices.Equal(got, want) {
-		t.Errorf("saved %+v, want %+v", got, want)
-	}
-	for _, c := range ta.commands {
-		if !slices.Contains(c, "BatchMode=yes") {
-			t.Errorf("without a terminal, ssh should be in batch mode: %q", c)
-		}
-	}
-	if want := []string{"probe.sh", "update.sh", "probe.sh"}; !slices.Equal(ta.scripts, want) {
-		t.Errorf("ran %q, want %q", ta.scripts, want)
-	}
-}
-
-func TestSetupLongConfigDir(t *testing.T) {
-	ta := newTestApp(t, "0.1.0")
-	ta.withKey(t, "id_ed25519")
-	ta.configDir = filepath.Join(ta.configDir, strings.Repeat("x", 100))
-	ta.mustRun(t, "setup", "--host", "box", "--yes")
-	for _, c := range ta.commands {
-		if slices.ContainsFunc(c, func(a string) bool { return strings.HasPrefix(a, "Control") }) {
-			t.Errorf("shares a connection through a socket ssh can't make: %q", c)
-		}
-	}
-}
-
-func TestSetupWithoutTerminalNeedsYes(t *testing.T) {
-	ta := newTestApp(t, "0.1.0")
-	ta.withKey(t, "id_ed25519")
-	if code := ta.Run([]string{"setup", "--host", "box"}); code != 1 {
-		t.Fatalf("exit %d, want 1", code)
-	}
-	if !strings.Contains(ta.stderr.String(), "--yes") || !slices.Equal(ta.scripts, []string{"probe.sh"}) {
-		t.Errorf("stderr: %s; ran %q", ta.stderr, ta.scripts)
-	}
-	if len(ta.servers(t)) != 1 {
-		t.Error("didn't save the server it logged in to")
-	}
-}
-
-func TestSetupNonInteractiveMissing(t *testing.T) {
-	for _, tc := range []struct {
-		args []string
-		want string
-	}{
-		{[]string{"setup"}, "pass --host"},
-		{[]string{"setup", "--host", "box.example.com"}, "pass --key"}, // no keys in ~/.ssh
-		{[]string{"setup", "--host", "10.0.0.5", "--key", "/etc/hosts"}, "pass --name"},
-		{[]string{"setup", "--host", "box", "--key", "/nonexistent"}, "--key: there's no file"},
-		{[]string{"setup", "--host", "box", "--user", "-x", "--key", "/etc/hosts"}, `--user: "-x" isn't a user name`},
-		{[]string{"setup", "--host", "a@box"}, "--host: enter just the IP address or hostname"},
-	} {
-		ta := newTestApp(t, "0.1.0")
-		if code := ta.Run(tc.args); code != 1 {
-			t.Errorf("%v: exit %d, want 1", tc.args, code)
-		}
-		if !strings.Contains(ta.stderr.String(), tc.want) {
-			t.Errorf("%v: stderr %q doesn't mention %q", tc.args, ta.stderr, tc.want)
-		}
-		if ta.sshArgs != nil {
-			t.Errorf("%v: ran ssh", tc.args)
-		}
-	}
-}
-
 func TestSetupNameTaken(t *testing.T) {
 	ta := newTestApp(t, "0.1.0")
 	key := ta.withKey(t, "id_ed25519")
@@ -276,25 +174,15 @@ func TestSetupNameTaken(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Without a terminal, it's an error.
-	if code := ta.Run([]string{"setup", "--host", "new", "--name", "box"}); code != 1 {
-		t.Fatalf("exit %d, want 1", code)
-	}
-	if !strings.Contains(ta.stderr.String(), "already a server named box") {
-		t.Errorf("stderr: %s", ta.stderr)
-	}
-
 	// Declining to replace it asks for another name.
-	ta.Interactive = true
-	ta.Stdin = strings.NewReader("new\n\n\nbox\nn\nbox2\n\n")
+	ta.typing("new", "", "", "box", "n", "box2", "")
 	ta.mustRun(t, "setup")
 	if got := ta.servers(t); len(got) != 2 || got[0].Host != "old" || got[1].Name != "box2" {
 		t.Errorf("saved %+v", got)
 	}
 
 	// Agreeing replaces it.
-	ta.Stdin = strings.NewReader("newer\n\n\nbox\ny\n\n")
-	ta.in = nil
+	ta.typing("newer", "", "", "box", "y", "")
 	ta.mustRun(t, "setup")
 	if got := ta.servers(t); len(got) != 2 || got[0].Host != "newer" {
 		t.Errorf("saved %+v", got)
@@ -305,8 +193,8 @@ func TestSetupNameTaken(t *testing.T) {
 
 	// The same answers again don't ask: it's the same server.
 	ta.stdout.Reset()
-	ta.Interactive = false
-	ta.mustRun(t, "setup", "--host", "newer", "--name", "box", "--yes")
+	ta.typing("newer", "", "", "box", "")
+	ta.mustRun(t, "setup")
 	if strings.Contains(ta.stdout.String(), "Replace it?") {
 		t.Errorf("asked to replace the same server:\n%s", ta.stdout)
 	}
@@ -314,8 +202,7 @@ func TestSetupNameTaken(t *testing.T) {
 
 func TestSetupCancelled(t *testing.T) {
 	ta := newTestApp(t, "0.1.0")
-	ta.Interactive = true
-	ta.Stdin = strings.NewReader("box.example.com\n") // then end of input
+	ta.typing("box.example.com") // then end of input
 
 	if code := ta.Run([]string{"setup"}); code != 1 {
 		t.Fatalf("exit %d, want 1", code)

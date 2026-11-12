@@ -5,103 +5,55 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"slices"
 	"strings"
 	"text/tabwriter"
-	"time"
 
 	"github.com/aakashns/rembox/cli/internal/config"
 	"github.com/aakashns/rembox/cli/internal/remote"
 )
 
-// sshOptions are the ssh options for the commands setup and info run on s:
-// log in with its key and nothing else, and share one connection between
-// them, so ssh asks for a key's passphrase once rather than for each command.
-func (a *App) sshOptions(s config.Server) ([]string, error) {
-	opts := append(keyArgs(s),
+// sshArgs are the ssh arguments to run command on s, for setup and info. ssh
+// logs in with s's key and nothing else, so a key that doesn't work fails
+// rather than ssh asking for a password.
+func sshArgs(s config.Server, command ...string) []string {
+	args := append(keyArgs(s),
 		"-o", "PasswordAuthentication=no",
 		"-o", "KbdInteractiveAuthentication=no",
-		"-o", "StrictHostKeyChecking=accept-new",
 		"-o", "ConnectTimeout=15",
 		"-o", "ServerAliveInterval=15", // notice within a minute if the server goes away
 		// Rather than your Mac's locale, which ssh passes on and a new server
 		// may not have, so every shell on it warns about it.
 		"-o", "SetEnv=LC_ALL=C.UTF-8",
+		"--", s.Destination(),
 	)
-	if !a.Interactive {
-		opts = append(opts, "-o", "BatchMode=yes") // no one to type a key's passphrase
-	}
-	dir, err := a.ConfigDir()
-	if err != nil {
-		return nil, err
-	}
-	// ssh names each connection's socket with %C, 40 characters, and adds up
-	// to 17 more while it sets it up; macOS allows 103 in all.
-	sockets := filepath.Join(dir, "ssh")
-	if len(sockets)+1+40+17 > 103 {
-		return opts, nil // too long to share connections; ssh works without
-	}
-	if err := os.MkdirAll(sockets, 0o700); err != nil {
-		return nil, err
-	}
-	return append(opts,
-		"-o", "ControlMaster=auto",
-		"-o", "ControlPath="+filepath.Join(sockets, "%C"),
-		"-o", "ControlPersist=60", // closes a minute after rembox's last command
-	), nil
+	return append(args, command...)
 }
 
-// runScript sends script to bash on s over ssh, with its output going to
-// stdout, after showing the command. color says whether the script should
-// color its output.
-func (a *App) runScript(s config.Server, opts []string, script remote.Script, stdout io.Writer, color bool) error {
-	args := append(slices.Clone(opts), "--", s.Destination(), "bash", "-s")
-	if color {
-		args = append(args, "--", "--color")
-	}
-	fmt.Fprintf(a.Stdout, "\n%s\n%s\n", a.paint(cyan, commandLine("ssh", args)+" < "+script.Name),
-		a.paint(dim, "  "+script.Name+" comes with rembox; read it at "+script.URL()))
-	return scriptErr(s, script, a.Pipe(strings.NewReader(script.Body), stdout, a.Stderr, "ssh", args...))
-}
-
-// runAsRoot runs script on s as root, with its output going to the terminal,
-// after showing the command. m is what the probe found. If rembox logs in as
-// root, it's the same as runScript. If not, the script runs with sudo, which
-// may ask for the user's password at the terminal; so the script can't come
-// in on stdin, and goes in the command instead.
-func (a *App) runAsRoot(s config.Server, opts []string, m remote.Machine, script remote.Script) error {
+// asRoot is sshArgs to run command on s as root: as it is if rembox logs in as
+// root (m is what the probe found), or else with sudo, at a terminal (-t) so
+// sudo can ask for the user's password.
+func asRoot(s config.Server, m remote.Machine, command ...string) []string {
 	if m.UID == 0 {
-		return a.runScript(s, opts, script, a.Stdout, a.Color)
+		return sshArgs(s, command...)
 	}
-	opts, sudo := a.sudo(opts, m)
-	args := append(append(opts, "--", s.Destination()), append(sudo, "bash", "-c")...)
+	return append([]string{"-t"}, sshArgs(s, append([]string{"sudo"}, command...)...)...)
+}
+
+// runScript runs script on s, after showing the command, with its output
+// going to stdout. args are the ssh arguments up to "bash -c", from sshArgs or
+// asRoot. The script goes in the command, quoted, so the server's shell passes
+// it to bash as it is.
+func (a *App) runScript(s config.Server, args []string, script remote.Script, stdout io.Writer) error {
 	after := []string{"bash"} // the script's $0
 	if a.Color {
 		after = append(after, "--color")
 	}
 	fmt.Fprintf(a.Stdout, "\n%s\n%s\n", a.paint(cyan, commandLine("ssh", args)+` "$(cat `+script.Name+`)" `+strings.Join(after, " ")),
-		a.paint(dim, wrap(script.Name+" comes with rembox; read it at "+script.URL()+
-			" (rembox quotes it, so the server's shell passes it to bash as it is)", "  ")))
-	args = append(append(args, shellQuote(script.Body)), after...)
-	return scriptErr(s, script, a.Command("ssh", args...))
-}
-
-// sudo returns the ssh options, and the start of a command, to run a command
-// on the server as root: nothing more as root; otherwise sudo, at a terminal
-// (-t), so it can ask for the user's password. Without a terminal, sudo -n
-// fails rather than ask.
-func (a *App) sudo(opts []string, m remote.Machine) ([]string, []string) {
-	opts = slices.Clone(opts)
-	switch {
-	case m.UID == 0:
-		return opts, nil
-	case a.Interactive:
-		return append(opts, "-t"), []string{"sudo"}
-	}
-	return opts, []string{"sudo", "-n"}
+		a.paint(dim, "  "+script.Name+" comes with rembox; read it at "+script.URL()))
+	args = append(append(slices.Clone(args), shellQuote(script.Body)), after...)
+	return scriptErr(s, script, a.Command(stdout, "ssh", args...))
 }
 
 // scriptErr explains err, from running script on s.
@@ -123,9 +75,9 @@ func scriptErr(s config.Server, script remote.Script, err error) error {
 }
 
 // probe runs remote.Probe on s and returns what it found.
-func (a *App) probe(s config.Server, opts []string) (remote.Machine, error) {
+func (a *App) probe(s config.Server) (remote.Machine, error) {
 	var out bytes.Buffer
-	if err := a.runScript(s, opts, remote.Probe, &out, false); err != nil {
+	if err := a.runScript(s, sshArgs(s, "bash", "-c"), remote.Probe, &out); err != nil {
 		return remote.Machine{}, err
 	}
 	m, err := remote.Parse(out.String())
@@ -176,40 +128,13 @@ func gib(kb int64) string {
 }
 
 // restart restarts s (as root, with sudo if need be), after showing the
-// command and asking (unless yes), and waits for it to start again. m is what
-// the probe found before the restart. It returns errDeclined if the answer is
-// no.
-func (a *App) restart(s config.Server, opts []string, m remote.Machine, yes bool) error {
-	rootOpts, sudo := a.sudo(opts, m)
-	args := append(append(rootOpts, "--", s.Destination()), append(sudo, "systemctl", "reboot")...)
-	err := a.runConfirmed(yes, "ssh", args...)
+// command and asking. m is what the probe found. It returns errDeclined if the
+// answer is no.
+func (a *App) restart(s config.Server, m remote.Machine) error {
+	err := a.runConfirmed("ssh", asRoot(s, m, "systemctl", "reboot")...)
 	var ee *exec.ExitError
 	if errors.As(err, &ee) && ee.ExitCode() == 255 {
-		err = nil // the server closed the connection as it shut down
+		return nil // the server closed the connection as it shut down
 	}
-	if err != nil {
-		return err
-	}
-
-	const every, tries = 5 * time.Second, 60
-	args = append(slices.Clone(opts), "--", s.Destination(), "cat", "/proc/sys/kernel/random/boot_id")
-	fmt.Fprintf(a.Stdout, "\nWaiting for %s to start again. Every %s, for up to %s, rembox runs this\n"+
-		"to see if it has (a server's boot ID changes each time it starts):\n", s.Name, every, every*tries)
-	a.showCommand("ssh", args)
-	fmt.Fprint(a.Stdout, "\n  ")
-	start := a.Now()
-	for range tries {
-		a.Sleep(every)
-		var out bytes.Buffer
-		err := a.Pipe(nil, &out, io.Discard, "ssh", args...)
-		if id := strings.TrimSpace(out.String()); err == nil && id != "" && id != m.BootID {
-			fmt.Fprintln(a.Stdout)
-			a.done(fmt.Sprintf("%s has restarted, after %s.", s.Name, a.Now().Sub(start).Round(time.Second)))
-			return nil
-		}
-		fmt.Fprint(a.Stdout, ".")
-	}
-	fmt.Fprintln(a.Stdout)
-	return fmt.Errorf("%s didn't start again within %s; look at it in your provider's console, "+
-		"then run rembox setup again", s.Name, every*tries)
+	return err
 }
