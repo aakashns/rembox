@@ -1,0 +1,93 @@
+# Every push to main runs the checks (ci.yml). If cli/VERSION isn't released yet, which it isn't
+# after merging a pull request (ci.yml makes each one bump it), it then publishes the binaries for
+# every platform, their SHA256SUMS, and build attestations as release v<VERSION>, which install.sh
+# and `rembox upgrade` download. Then it installs the release on each platform to check it works.
+name: Release
+
+on:
+  push:
+    branches: [main]
+  # Releases cli/VERSION, if it isn't released already.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Runs on main go one at a time, so releases are made in order.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  version:
+    runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      release: ${{ steps.version.outputs.release }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(cat cli/VERSION)
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
+            { echo "::error file=cli/VERSION::'$version' isn't a version like 1.2.3"; exit 1; }
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          if gh release view "v$version" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "v$version is released already"
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  check:
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    needs: [version, check]
+    if: needs.version.outputs.release == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write # to create the release and its tag
+      id-token: write # to sign the attestations
+      attestations: write
+    defaults:
+      run:
+        working-directory: cli
+    env:
+      TAG: ${{ needs.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: cli/go.mod
+          cache-dependency-path: cli/go.mod
+      - run: make dist VERSION="${TAG#v}"
+      - uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: cli/dist/rembox-*
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "$TAG" --generate-notes -- dist/rembox-* dist/SHA256SUMS
+
+  # Installs the new release with install.sh, as a user would, and checks it.
+  smoke-test:
+    needs: [version, release]
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm, macos-15, macos-15-intel]
+    runs-on: ${{ matrix.runner }}
+    env:
+      TAG: ${{ needs.version.outputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+      - run: REMBOX_INSTALL_DIR="$RUNNER_TEMP/bin" sh site/public/install.sh
+      - run: |
+          "$RUNNER_TEMP/bin/rembox" version | tee /dev/stderr | grep -q "^rembox ${TAG#v} "
+      - run: gh attestation verify "$RUNNER_TEMP/bin/rembox" --repo "$GITHUB_REPOSITORY"
