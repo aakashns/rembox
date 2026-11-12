@@ -50,7 +50,8 @@
 
       <p class="callout">
         <strong>Early days.</strong> So far <code>rembox setup</code> installs updates, adds your
-        user, moves ssh to another port with keys only, and sets up fail2ban. More steps are coming.
+        user, moves ssh to another port with keys only, turns on a firewall, and sets up fail2ban.
+        More steps are coming.
       </p>
 
       <section aria-labelledby="commands">
@@ -59,7 +60,8 @@
           <dt><code>rembox setup [NAME]</code></dt>
           <dd>
             Adds a server (or, with NAME, changes one), then installs updates, adds your user (whose
-            sudo asks for its password), locks down ssh, sets up fail2ban, and restarts it if needed.
+            sudo asks for its password), locks down ssh, blocks every other incoming port with ufw,
+            sets up fail2ban, and restarts it if needed.
             Offers to set up <code>~/.ssh/config</code> so <code>ssh NAME</code> works too.
           </dd>
           <dt><code>rembox list</code></dt>

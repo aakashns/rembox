@@ -73,13 +73,16 @@ fail() {
   exit 1
 }
 
-# confirm QUESTION: asks a yes/no question at the terminal, which rembox runs
-# the script at (ssh -t). Succeeds if the answer is y or yes.
+# confirm QUESTION [yes]: asks a yes/no question at the terminal, which rembox
+# runs the script at (ssh -t). Succeeds if the answer is y or yes, or, given
+# yes, if there's no answer.
 confirm() {
-  local answer=''
-  printf '\n    %s%s%s [y/N] ' "$BOLD" "$1" "$RESET"
+  local answer='' default=${2:-no} choices='[y/N]'
+  [[ $default == yes ]] && choices='[Y/n]'
+  printf '\n    %s%s%s %s ' "$BOLD" "$1" "$RESET" "$choices"
   read -r answer </dev/tty || true
-  [[ ${answer,,} == y || ${answer,,} == yes ]]
+  answer=${answer,,}
+  [[ ${answer:-$default} == y || ${answer:-$default} == yes ]]
 }
 
 # same FILE CONTENT: succeeds if FILE holds just CONTENT (and a newline).
