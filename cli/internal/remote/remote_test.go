@@ -73,7 +73,7 @@ func TestProblems(t *testing.T) {
 }
 
 func TestScripts(t *testing.T) {
-	for _, s := range []Script{Probe, Update} {
+	for _, s := range []Script{Probe, Setup} {
 		if !strings.HasPrefix(s.Body, "# lib.sh") || !strings.HasSuffix(s.Body, "main \"$@\" </dev/null\n") {
 			t.Errorf("%s isn't lib.sh then a script ending with main", s.Name)
 		}

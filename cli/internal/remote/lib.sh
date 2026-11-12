@@ -2,7 +2,7 @@
 # a script with `bash -c` on the server, as one script.
 #
 # Each script defines main and ends with `main "$@" </dev/null`, so no command
-# in it stops to read input.
+# in it stops to read input; only confirm asks, at the terminal.
 #
 # rembox passes --color when your terminal shows color.
 
@@ -15,15 +15,15 @@ export LC_ALL=C.UTF-8 LANG=C.UTF-8
 unset LANGUAGE
 
 if [[ ${1:-} == --color ]]; then
-  BOLD=$'\e[1m' DIM=$'\e[2m' CYAN=$'\e[36m' GREEN=$'\e[32m' YELLOW=$'\e[33m' RESET=$'\e[0m'
+  shift
+  BOLD=$'\e[1m' DIM=$'\e[2m' RED=$'\e[31m' CYAN=$'\e[36m' GREEN=$'\e[32m' YELLOW=$'\e[33m' RESET=$'\e[0m'
 else
-  BOLD='' DIM='' CYAN='' GREEN='' YELLOW='' RESET=''
+  BOLD='' DIM='' RED='' CYAN='' GREEN='' YELLOW='' RESET=''
 fi
 
-# step TITLE ABOUT: starts a part of the script, saying what it does and why.
+# step TITLE: starts a part of the script.
 step() {
   printf '\n%s-->%s %s%s%s\n' "$CYAN" "$RESET" "$BOLD" "$1" "$RESET"
-  printf '%s\n' "$2" | fold -s -w 72 | sed 's/ *$//; s/^/    /'
 }
 
 # run COMMAND...: shows a command, then runs it with its output indented under
@@ -51,4 +51,23 @@ ok() {
 # warn MESSAGE: says something went wrong that the script can carry on after.
 warn() {
   printf '\n    %s! %s%s\n' "$YELLOW" "$1" "$RESET"
+}
+
+# fail MESSAGE...: says why the script can't carry on, a line each, and stops it.
+fail() {
+  printf '\n'
+  local line
+  for line; do
+    printf '    %s✗ %s%s\n' "$RED" "$line" "$RESET"
+  done
+  exit 1
+}
+
+# confirm QUESTION: asks a yes/no question at the terminal, which rembox runs
+# the script at (ssh -t). Succeeds if the answer is y or yes.
+confirm() {
+  local answer=''
+  printf '\n    %s%s%s [y/N] ' "$BOLD" "$1" "$RESET"
+  read -r answer </dev/tty || true
+  [[ ${answer,,} == y || ${answer,,} == yes ]]
 }

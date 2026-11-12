@@ -1,7 +1,7 @@
 package cli
 
 import (
-	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/aakashns/rembox/cli/internal/config"
+	"github.com/aakashns/rembox/cli/internal/remote"
 )
 
 // withKey puts a private key (and its public key) at ~/.ssh/name and returns
@@ -47,17 +48,13 @@ func TestSetup(t *testing.T) {
 	ta := newTestApp(t, "0.1.0")
 	key := ta.withKey(t, "id_ed25519")
 	// An IP address has no default name, so the name is typed; the user and
-	// key are the defaults, and so is installing updates.
-	ta.typing("203.0.113.10", "", "", "box1", "")
+	// key are the defaults.
+	ta.typing("203.0.113.10", "", "", "box1")
 
 	ta.mustRun(t, "setup")
 	out := ta.stdout.String()
 	for _, want := range []string{"User to log in as [root]:", "SSH private key [~/.ssh/id_ed25519]:",
-		"Name for this server:", "saved the server as box1 (root@203.0.113.10)",
-		"==> Step 1 of 3: Log in", "==> Step 2 of 3: Check the server", "==> Step 3 of 3: Install updates",
-		"Ubuntu 26.04.1 LTS, kernel 7.0.0-10-generic", "2 cores, arm64", "3.7 GiB, and no swap",
-		"35.2 GiB free of 37.8 GiB", "rembox can set up this server.",
-		"Install updates on box1 now? [Y/n]", "(what update.sh prints)", "No restart needed.",
+		"Name for this server:", "Saved box1 (root@203.0.113.10)", "(what setup.sh prints)",
 		"box1 is set up. To log in: rembox ssh box1"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("output missing %q:\n%s", want, out)
@@ -67,21 +64,21 @@ func TestSetup(t *testing.T) {
 	if got := ta.servers(t); !slices.Equal(got, want) {
 		t.Errorf("saved %+v, want %+v", got, want)
 	}
-	if !slices.Contains(ta.sshArgs, "root@203.0.113.10") || !slices.Contains(ta.sshArgs, key) {
+	// One ssh session, at a terminal, which runs setup.sh as root, without sudo.
+	if len(ta.commands) != 1 || !slices.Equal(ta.scripts, []string{"setup.sh"}) {
+		t.Errorf("ran %q", ta.commands)
+	}
+	if !slices.Contains(ta.sshArgs, "root@203.0.113.10") || !slices.Contains(ta.sshArgs, key) ||
+		ta.sshArgs[0] != "-t" || slices.Contains(ta.sshArgs, "sudo") {
 		t.Errorf("ssh args %q", ta.sshArgs)
 	}
-	if want := []string{"probe.sh", "update.sh", "probe.sh"}; !slices.Equal(ta.scripts, want) {
-		t.Errorf("ran %q, want %q", ta.scripts, want)
-	}
-	if !strings.Contains(out, "\n$ ssh -i "+key) || !strings.Contains(out, `root@203.0.113.10 bash -c "$(cat probe.sh)" bash`+"\n"+
-		"  probe.sh comes with rembox; read it at https://github.com/aakashns/rembox/blob/v0.1.0/cli/internal/remote/probe.sh\n") {
+	if !strings.Contains(out, "\n$ ssh -t -i "+key+" -o IdentitiesOnly=yes") ||
+		!strings.Contains(out, `root@203.0.113.10 bash -c "$(cat setup.sh)" bash`+"\n"+
+			"  setup.sh comes with rembox; read it at https://github.com/aakashns/rembox/blob/v0.1.0/cli/internal/remote/setup.sh\n") {
 		t.Errorf("output doesn't show the script's command:\n%s", out)
 	}
 	if strings.Index(out, "User to log in as") > strings.Index(out, "SSH private key") {
 		t.Errorf("asked for the key before the user:\n%s", out)
-	}
-	if !strings.Contains(out, "\n\n$ ssh -i "+key+" -o IdentitiesOnly=yes") {
-		t.Errorf("output doesn't show the ssh command:\n%s", out)
 	}
 	info, err := os.Stat(filepath.Join(ta.configDir, "servers", "box1.json"))
 	if err != nil || info.Mode().Perm() != 0o600 {
@@ -96,16 +93,99 @@ func TestSetup(t *testing.T) {
 	}
 }
 
+func TestSetupWithSudo(t *testing.T) {
+	ta := newTestApp(t, "0.1.0")
+	ta.withKey(t, "id_ed25519")
+	ta.typing("box", "dev", "", "")
+	ta.mustRun(t, "setup")
+	if !strings.Contains(ta.stdout.String(), `-- dev@box sudo bash -c "$(cat setup.sh)" bash`+"\n") {
+		t.Errorf("output:\n%s", ta.stdout)
+	}
+	// The script goes in the command, quoted, and ssh runs it at a terminal,
+	// so sudo can ask for the password.
+	args := ta.sshArgs
+	i := slices.Index(args, "-c")
+	if i < 0 || args[0] != "-t" || args[i-2] != "sudo" || args[i+1] != shellQuote(remote.Setup.Body) ||
+		!slices.Equal(args[i+2:], []string{"bash"}) {
+		t.Errorf("ssh args %q", args)
+	}
+}
+
+func TestSetupAgain(t *testing.T) {
+	ta := newTestApp(t, "0.1.0")
+	key := ta.withKey(t, "id_ed25519")
+	if err := config.SaveServer(ta.configDir, config.Server{Name: "box", Host: "old.example.com", User: "dev", Key: key}); err != nil {
+		t.Fatal(err)
+	}
+	// The saved settings are the defaults; a new address replaces the old.
+	ta.typing("new.example.com", "", "")
+	ta.mustRun(t, "setup", "box")
+	out := ta.stdout.String()
+	for _, want := range []string{"Server IP address or hostname [old.example.com]:", "User to log in as [dev]:",
+		"SSH private key [~/.ssh/id_ed25519]:", "Saved box (dev@new.example.com)"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "Name for this server") {
+		t.Errorf("asked for the name it was given:\n%s", out)
+	}
+	want := []config.Server{{Name: "box", Host: "new.example.com", User: "dev", Key: key}}
+	if got := ta.servers(t); !slices.Equal(got, want) {
+		t.Errorf("saved %+v, want %+v", got, want)
+	}
+}
+
+func TestSetupArgs(t *testing.T) {
+	for _, tc := range []struct {
+		args []string
+		code int
+		want string
+	}{
+		{[]string{"setup", "nope"}, 1, "there's no server named nope"},
+		{[]string{"setup", "a", "b"}, 2, `unexpected argument "b"`},
+		{[]string{"setup", "-x"}, 2, "unknown flag -x"},
+	} {
+		ta := newTestApp(t, "0.1.0")
+		ta.withServers(t, "a")
+		if code := ta.Run(tc.args); code != tc.code {
+			t.Errorf("%v: exit %d, want %d", tc.args, code, tc.code)
+		}
+		if !strings.Contains(ta.stderr.String(), tc.want) {
+			t.Errorf("%v: stderr %q doesn't mention %q", tc.args, ta.stderr, tc.want)
+		}
+	}
+}
+
+func TestSetupFails(t *testing.T) {
+	ta := newTestApp(t, "0.1.0")
+	ta.withKey(t, "id_ed25519")
+	ta.onScript = func(string, []string, io.Writer) error { return exitWith(1) }
+	ta.typing("box", "", "", "")
+	ta.mustFail(t, "setup.sh failed on box (exit status 1); the output above says why", "setup")
+	if strings.Contains(ta.stdout.String(), "is set up") {
+		t.Errorf("output:\n%s", ta.stdout)
+	}
+}
+
+func TestSetupCantConnect(t *testing.T) {
+	ta := newTestApp(t, "0.1.0")
+	ta.withKey(t, "id_ed25519")
+	ta.onScript = func(string, []string, io.Writer) error { return exitWith(255) }
+	ta.typing("box.example.com", "", "", "")
+	ta.mustFail(t, "ssh couldn't connect to root@box.example.com (exit status 255). "+
+		"To change the address, user or key: rembox setup box.example.com", "setup")
+	// Saved before logging in, so it can be fixed with rembox setup NAME.
+	if len(ta.servers(t)) != 1 {
+		t.Error("didn't save the server")
+	}
+}
+
 func TestSetupHostnameIsDefaultName(t *testing.T) {
 	ta := newTestApp(t, "0.1.0")
 	ta.withKey(t, "id_rsa")
-	ta.probeOut = facts("user=ubuntu", "uid=1000", "sudo=no")
 	ta.typing("Dev.Example.com", "ubuntu", "", "")
-
-	// Saved, though rembox can't set it up as ubuntu without sudo.
-	if code := ta.Run([]string{"setup"}); code != 1 {
-		t.Fatalf("exit %d, want 1", code)
-	}
+	ta.mustRun(t, "setup")
 	if !strings.Contains(ta.stdout.String(), "Name for this server [dev.example.com]:") {
 		t.Errorf("output:\n%s", ta.stdout)
 	}
@@ -124,7 +204,6 @@ func TestSetupAsksAgain(t *testing.T) {
 		"-u", "deploy", // user
 		"", "~/.ssh/missing", "~/.ssh", "~/.ssh/work.pub", "~/.ssh/work", // key (no default)
 		"Box!", "box", // name
-		"", // install updates
 	)
 
 	ta.mustRun(t, "setup")
@@ -146,27 +225,6 @@ func TestSetupAsksAgain(t *testing.T) {
 	}
 }
 
-func TestSetupSSHFails(t *testing.T) {
-	ta := newTestApp(t, "0.1.0")
-	ta.withKey(t, "id_ed25519")
-	ta.sshErr = errors.New("exit status 255")
-	ta.typing("box.example.com", "", "", "")
-
-	if code := ta.Run([]string{"setup"}); code != 1 {
-		t.Fatalf("exit %d, want 1", code)
-	}
-	if !strings.Contains(ta.stderr.String(), "couldn't log in to root@box.example.com") ||
-		!strings.Contains(ta.stderr.String(), "Nothing was saved") {
-		t.Errorf("stderr: %s", ta.stderr)
-	}
-	if exists(filepath.Join(ta.configDir, "servers")) {
-		t.Error("saved a server ssh couldn't log in to")
-	}
-	if ta.scripts != nil {
-		t.Errorf("ran %q", ta.scripts)
-	}
-}
-
 func TestSetupNameTaken(t *testing.T) {
 	ta := newTestApp(t, "0.1.0")
 	key := ta.withKey(t, "id_ed25519")
@@ -175,14 +233,14 @@ func TestSetupNameTaken(t *testing.T) {
 	}
 
 	// Declining to replace it asks for another name.
-	ta.typing("new", "", "", "box", "n", "box2", "")
+	ta.typing("new", "", "", "box", "n", "box2")
 	ta.mustRun(t, "setup")
 	if got := ta.servers(t); len(got) != 2 || got[0].Host != "old" || got[1].Name != "box2" {
 		t.Errorf("saved %+v", got)
 	}
 
 	// Agreeing replaces it.
-	ta.typing("newer", "", "", "box", "y", "")
+	ta.typing("newer", "", "", "box", "y")
 	ta.mustRun(t, "setup")
 	if got := ta.servers(t); len(got) != 2 || got[0].Host != "newer" {
 		t.Errorf("saved %+v", got)
@@ -193,7 +251,7 @@ func TestSetupNameTaken(t *testing.T) {
 
 	// The same answers again don't ask: it's the same server.
 	ta.stdout.Reset()
-	ta.typing("newer", "", "", "box", "")
+	ta.typing("newer", "", "", "box")
 	ta.mustRun(t, "setup")
 	if strings.Contains(ta.stdout.String(), "Replace it?") {
 		t.Errorf("asked to replace the same server:\n%s", ta.stdout)

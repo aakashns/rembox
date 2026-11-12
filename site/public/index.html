@@ -57,29 +57,22 @@
       <section aria-labelledby="commands">
         <h2 id="commands">Commands</h2>
         <dl class="commands">
-          <dt><code>rembox setup</code></dt>
+          <dt><code>rembox setup [NAME]</code></dt>
           <dd>
-            Gets a server ready for development, explaining each step as it goes:
+            Gets a server ready for development. Asks for the server’s IP address or hostname, the
+            user to log in as (root, by default), the SSH key to log in with, and a name for it (its
+            hostname, by default), and saves it. Give the NAME of a server you’ve added to set it up
+            again, with its settings as the defaults. Then rembox logs in with ssh and runs
+            <code>setup.sh</code> on the server, which shows each command it runs as it:
             <ol>
-              <li>
-                <strong>Log in.</strong> Asks for the server’s IP address or hostname, the user to
-                log in as (root, by default), the SSH key to log in with, and a name for it (its
-                hostname, by default), then checks that ssh can log in and saves it.
-              </li>
-              <li>
-                <strong>Check.</strong> Runs a short script on the server that reports its system,
-                processor, memory and disk, and checks that rembox can set it up: so far, Ubuntu or
-                Debian.
-              </li>
-              <li>
-                <strong>Update.</strong> Installs the latest version of every package with apt, then
-                restarts the server if an update needs it. Asks before each. Unless it logs in as root,
-                rembox does these with <code>sudo</code>, which may ask for the user’s password on the
-                server.
-              </li>
+              <li>Checks that rembox can set up the server: so far, Ubuntu or Debian.</li>
+              <li>Installs the latest version of every package with apt.</li>
+              <li>Asks to restart the server, if an update needs it.</li>
             </ol>
-            Run it again any time: each step looks at the server as it is now and changes only what
-            needs changing. rembox keeps nothing about a server but how to log in to it.
+            Unless it logs in as root, rembox runs <code>setup.sh</code> with <code>sudo</code>, which
+            may ask for the user’s password on the server. Run it again any time: each step looks at
+            the server as it is now and changes only what needs changing. rembox keeps nothing about
+            a server but how to log in to it.
           </dd>
           <dt><code>rembox list</code></dt>
           <dd>Lists the servers you’ve added, with the user, host and key rembox logs in with.</dd>

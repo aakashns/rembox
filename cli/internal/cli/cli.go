@@ -140,13 +140,6 @@ func (a *App) paint(style, s string) string {
 	return "\x1b[" + style + "m" + s + "\x1b[0m"
 }
 
-// stage starts step n of a command's total steps: its title, then what it
-// does and why.
-func (a *App) stage(n, total int, title, about string) {
-	fmt.Fprintf(a.Stdout, "\n\n%s %s\n%s\n", a.paint(cyan, "==>"),
-		a.paint(bold, fmt.Sprintf("Step %d of %d: %s", n, total, title)), wrap(about, "    "))
-}
-
 // done says that something worked.
 func (a *App) done(msg string) {
 	fmt.Fprintf(a.Stdout, "\n%s %s\n", a.paint(green, "✓"), msg)
@@ -195,7 +188,7 @@ func commands() []command {
 	return []command{
 		{
 			name:    "setup",
-			summary: "Add a server and get it ready: check it, then install updates",
+			summary: "Add or change a server, and get it ready: check it, then install updates",
 			help:    setupHelp,
 			run:     runSetup,
 		},

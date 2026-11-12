@@ -58,7 +58,7 @@ func facts(overrides ...string) string {
 
 // scriptIn is the name of the rembox script in ssh's args, or "".
 func scriptIn(args []string) string {
-	for _, s := range []remote.Script{remote.Probe, remote.Update} {
+	for _, s := range []remote.Script{remote.Probe, remote.Setup} {
 		if slices.Contains(args, shellQuote(s.Body)) {
 			return s.Name
 		}
@@ -120,7 +120,7 @@ func newTestApp(t *testing.T, current string) *testApp {
 				if script == "probe.sh" {
 					fmt.Fprint(stdout, ta.probeOut)
 				} else {
-					fmt.Fprintln(stdout, "(what update.sh prints)")
+					fmt.Fprintln(stdout, "(what setup.sh prints)")
 				}
 				return nil
 			}

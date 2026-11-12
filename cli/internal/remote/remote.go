@@ -27,8 +27,9 @@ var (
 	// Probe reports what kind of machine a server is, as facts for Parse. It
 	// changes nothing.
 	Probe = load("probe.sh")
-	// Update installs the latest version of every package with apt.
-	Update = load("update.sh")
+	// Setup gets a server ready for development: it checks that rembox can
+	// set it up, then installs updates.
+	Setup = load("setup.sh")
 )
 
 func load(name string) Script {
