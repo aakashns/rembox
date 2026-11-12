@@ -23,7 +23,6 @@ to log in as (root, by default), the SSH key to log in with, and a name for it
 and saves the server so that 'rembox list' shows it. Nothing is saved if ssh
 can't log in.
 
-You can also give the user with the host, as in ubuntu@203.0.113.10.
 The first time you connect to a server, ssh adds its host key to
 ~/.ssh/known_hosts; if the key later changes, ssh refuses to connect.
 
@@ -31,7 +30,7 @@ Flags answer the questions up front. Without a terminal, setup uses the
 defaults for any question a flag doesn't answer, and fails if there isn't one.
 
 Flags:
-  --host HOST   The server's IP address or hostname, or user@host
+  --host HOST   The server's IP address or hostname
   --user USER   The user to log in as (default root)
   --key PATH    The SSH private key to log in with (default ~/.ssh/id_ed25519,
                 or another key in ~/.ssh)
@@ -60,23 +59,14 @@ func runSetup(a *App, args []string) error {
 		return fmt.Errorf("can't find your home folder: %w", err)
 	}
 
-	dest, err := a.answer("host", hostFlag, "Server IP address or hostname", "", checkDestination)
+	var s config.Server
+	s.Host, err = a.answer("host", hostFlag, "Server IP address or hostname", "", checkHost)
 	if err != nil {
 		return err
 	}
-	var s config.Server
-	if user, host, ok := strings.Cut(dest, "@"); ok {
-		// The user came with the host, so there's no need to ask for it.
-		if userFlag != "" && userFlag != user {
-			return fmt.Errorf("--host says to log in as %s but --user says %s; give just one", user, userFlag)
-		}
-		s.User, s.Host = user, host
-	} else {
-		s.Host = dest
-		s.User, err = a.answer("user", userFlag, "User to log in as", "root", checkUser)
-		if err != nil {
-			return err
-		}
+	s.User, err = a.answer("user", userFlag, "User to log in as", "root", checkUser)
+	if err != nil {
+		return err
 	}
 
 	s.Key, err = a.answer("key", keyFlag, "SSH private key", defaultKey(home), func(p string) (string, error) {
@@ -167,26 +157,19 @@ var (
 	userPattern = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]*$`)
 )
 
-// checkDestination checks a host or user@host, and returns it without
+// checkHost checks an IP address or hostname, and returns it without
 // brackets around an IPv6 address.
-func checkDestination(v string) (string, error) {
-	user, host, hasUser := strings.Cut(v, "@")
-	if !hasUser {
-		host = v
-	}
-	host = strings.TrimSuffix(strings.TrimPrefix(host, "["), "]") // [IPv6]
+func checkHost(v string) (string, error) {
+	host := strings.TrimSuffix(strings.TrimPrefix(v, "["), "]") // [IPv6]
 	switch {
 	case host == "":
 		return "", errors.New("enter the server's IP address or hostname")
+	case strings.Contains(host, "@"):
+		return "", errors.New("enter just the IP address or hostname; rembox asks for the user next")
 	case net.ParseIP(host) == nil && !hostPattern.MatchString(host):
 		return "", fmt.Errorf("%q isn't an IP address or hostname", host)
-	case !hasUser:
-		return host, nil
 	}
-	if _, err := checkUser(user); err != nil {
-		return "", err
-	}
-	return user + "@" + host, nil
+	return host, nil
 }
 
 // checkUser checks a user name to log in as.

@@ -92,11 +92,10 @@ func TestSetupHostnameIsDefaultName(t *testing.T) {
 	ta := newTestApp(t, "0.1.0")
 	ta.withKey(t, "id_rsa")
 	ta.Interactive = true
-	ta.Stdin = strings.NewReader("ubuntu@Dev.Example.com\n\n\n")
+	ta.Stdin = strings.NewReader("Dev.Example.com\nubuntu\n\n\n")
 
 	ta.mustRun(t, "setup")
-	if !strings.Contains(ta.stdout.String(), "Name for this server [dev.example.com]:") ||
-		strings.Contains(ta.stdout.String(), "User to log in as") {
+	if !strings.Contains(ta.stdout.String(), "Name for this server [dev.example.com]:") {
 		t.Errorf("output:\n%s", ta.stdout)
 	}
 	got := ta.servers(t)
@@ -111,7 +110,7 @@ func TestSetupAsksAgain(t *testing.T) {
 	key := ta.withKey(t, "work")
 	ta.Interactive = true
 	ta.Stdin = strings.NewReader(strings.Join([]string{
-		"", "-oProxyCommand=evil", "box.example.com", // host
+		"", "-oProxyCommand=evil", "deploy@box.example.com", "box.example.com", // host
 		"-u", "deploy", // user
 		"", "~/.ssh/missing", "~/.ssh", "~/.ssh/work.pub", "~/.ssh/work", // key (no default)
 		"Box!", "box", // name
@@ -122,6 +121,7 @@ func TestSetupAsksAgain(t *testing.T) {
 	for _, want := range []string{
 		"enter the server's IP address or hostname",
 		`"-oProxyCommand=evil" isn't an IP address or hostname`,
+		"rembox asks for the user next",
 		`"-u" isn't a user name`,
 		"ssh-keygen", "there's no file at", "is a folder", "is a public key",
 		`"Box!" can't be a name`,
@@ -159,12 +159,8 @@ func TestSetupFlags(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ta.mustRun(t, "setup", "--host", "admin@10.0.0.5", "--key", key, "--name", "lab")
-	ta.mustRun(t, "setup", "--host", "10.0.0.6", "--user", "admin", "--key", key, "--name", "lab2")
-	want := []config.Server{
-		{Name: "lab", Host: "10.0.0.5", User: "admin", Key: key},
-		{Name: "lab2", Host: "10.0.0.6", User: "admin", Key: key},
-	}
+	ta.mustRun(t, "setup", "--host", "10.0.0.5", "--user", "admin", "--key", key, "--name", "lab")
+	want := []config.Server{{Name: "lab", Host: "10.0.0.5", User: "admin", Key: key}}
 	if got := ta.servers(t); !slices.Equal(got, want) {
 		t.Errorf("saved %+v, want %+v", got, want)
 	}
@@ -183,7 +179,7 @@ func TestSetupNonInteractiveMissing(t *testing.T) {
 		{[]string{"setup", "--host", "10.0.0.5", "--key", "/etc/hosts"}, "pass --name"},
 		{[]string{"setup", "--host", "box", "--key", "/nonexistent"}, "--key: there's no file"},
 		{[]string{"setup", "--host", "box", "--user", "-x", "--key", "/etc/hosts"}, `--user: "-x" isn't a user name`},
-		{[]string{"setup", "--host", "a@box", "--user", "b", "--key", "/etc/hosts"}, "give just one"},
+		{[]string{"setup", "--host", "a@box"}, "--host: enter just the IP address or hostname"},
 	} {
 		ta := newTestApp(t, "0.1.0")
 		if code := ta.Run(tc.args); code != 1 {
@@ -282,25 +278,21 @@ func TestShellQuote(t *testing.T) {
 	}
 }
 
-func TestCheckDestination(t *testing.T) {
+func TestCheckHost(t *testing.T) {
 	for in, want := range map[string]string{
-		"203.0.113.10":           "203.0.113.10",
-		"box.example.com":        "box.example.com",
-		"ubuntu@box":             "ubuntu@box",
-		"[2001:db8::1]":          "2001:db8::1",
-		"deploy@2001:db8::1":     "deploy@2001:db8::1",
-		"":                       "",
-		"box example":            "",
-		"-oProxyCommand=x":       "",
-		"-u@box":                 "",
-		"user@":                  "",
-		"box.example.com:2222":   "",
-		"user@host@other":        "",
-		"ubuntu@box.example.com": "ubuntu@box.example.com",
+		"203.0.113.10":         "203.0.113.10",
+		"box.example.com":      "box.example.com",
+		"[2001:db8::1]":        "2001:db8::1",
+		"2001:db8::1":          "2001:db8::1",
+		"":                     "",
+		"box example":          "",
+		"-oProxyCommand=x":     "",
+		"ubuntu@box":           "",
+		"box.example.com:2222": "",
 	} {
-		got, err := checkDestination(in)
+		got, err := checkHost(in)
 		if (err != nil) != (want == "") || got != want {
-			t.Errorf("checkDestination(%q) = %q, %v; want %q", in, got, err, want)
+			t.Errorf("checkHost(%q) = %q, %v; want %q", in, got, err, want)
 		}
 	}
 }
