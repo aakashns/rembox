@@ -205,12 +205,6 @@ func commands() []command {
 			run:     runSSH,
 		},
 		{
-			name:    "info",
-			summary: "Show what kind of machine a server is",
-			help:    infoHelp,
-			run:     runInfo,
-		},
-		{
 			name:    "help",
 			summary: "Show help for rembox or one of its commands",
 			help:    "Usage: rembox help [command]\n\nShow help for rembox, or for one command.\n",

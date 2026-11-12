@@ -1,20 +1,19 @@
 package cli
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os/exec"
 	"slices"
 	"strings"
-	"text/tabwriter"
 
 	"github.com/aakashns/rembox/cli/internal/config"
 	"github.com/aakashns/rembox/cli/internal/remote"
 )
 
-// sshArgs are the ssh arguments to run command on s, for setup and info. ssh
+// sshArgs are the ssh arguments to run command on s, for setup. ssh
 // logs in with s's key and nothing else, so a key that doesn't work fails
 // rather than ssh asking for a password.
 func sshArgs(s config.Server, command ...string) []string {
@@ -73,55 +72,15 @@ func scriptErr(s config.Server, script remote.Script, err error) error {
 	return err
 }
 
-// probe runs remote.Probe on s and returns what it found.
-func (a *App) probe(s config.Server) (remote.Machine, error) {
-	var out bytes.Buffer
-	if err := a.runScript(s, sshArgs(s, "bash", "-c"), remote.Probe, &out); err != nil {
-		return remote.Machine{}, err
-	}
-	m, err := remote.Parse(out.String())
+// loadServer returns the saved server called name.
+func (a *App) loadServer(name string) (config.Server, error) {
+	dir, err := a.ConfigDir()
 	if err != nil {
-		return m, fmt.Errorf("couldn't read what %s found: %w", remote.Probe.Name, err)
+		return config.Server{}, err
 	}
-	return m, nil
-}
-
-// showMachine lists what the probe found, one fact to a line.
-func (a *App) showMachine(m remote.Machine) {
-	fmt.Fprintln(a.Stdout)
-	tw := tabwriter.NewWriter(a.Stdout, 0, 0, 2, ' ', 0)
-	row := func(label, value string) { fmt.Fprintf(tw, "  %s\t%s\n", label, value) }
-	row("System", fmt.Sprintf("%s, kernel %s", orUnknown(m.OSName), m.Kernel))
-	row("Processor", fmt.Sprintf("%s, %s", plural(m.CPUs, "core"), m.Arch))
-	swap := "no swap"
-	if m.SwapKB > 0 {
-		swap = gib(m.SwapKB) + " of swap"
+	s, err := config.LoadServer(dir, name)
+	if errors.Is(err, fs.ErrNotExist) {
+		return s, fmt.Errorf("there's no server named %s; 'rembox list' shows your servers", name)
 	}
-	row("Memory", fmt.Sprintf("%s, and %s", gib(m.MemoryKB), swap))
-	row("Disk", fmt.Sprintf("%s free of %s", gib(m.DiskFreeKB), gib(m.DiskKB)))
-	row("Hostname", m.Hostname)
-	switch m.Virt {
-	case "none":
-		row("Runs on", "its own hardware")
-	case "unknown", "":
-	default:
-		row("Runs on", "a virtual machine ("+m.Virt+")")
-	}
-	row("Logged in as", m.User)
-	if m.RebootRequired {
-		row("Restart", a.paint(yellow, "needed, to finish installing updates"))
-	}
-	tw.Flush()
-}
-
-func orUnknown(s string) string {
-	if s == "" {
-		return "unknown"
-	}
-	return s
-}
-
-// gib shows a size in KiB as GiB.
-func gib(kb int64) string {
-	return fmt.Sprintf("%.1f GiB", float64(kb)/(1<<20))
+	return s, err
 }
