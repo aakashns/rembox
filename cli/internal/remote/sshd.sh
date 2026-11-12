@@ -4,7 +4,7 @@ SSHD_CONFIG=/etc/ssh/sshd_config.d/00-rembox.conf
 
 # setup_sshd ROOT_LOGIN PORT...: sets sshd to listen on the PORTs and no others, and
 # to let in only keys, and root as ROOT_LOGIN says: no, or prohibit-password
-# (with a key). Opens the ports in ufw, if it's on.
+# (with a key).
 setup_sshd() {
   local root_login=$1
   shift
@@ -41,13 +41,6 @@ setup_sshd() {
     fail "Another file in /etc/ssh turns on PasswordAuthentication. Remove it, then run rembox setup again."
   if [[ $root_login == no ]] && ! grep -qx 'permitrootlogin no' <<<"$effective"; then
     fail "Another file in /etc/ssh sets PermitRootLogin. Remove it, then run rembox setup again."
-  fi
-
-  if ufw status 2>/dev/null | grep -qx 'Status: active'; then
-    local port
-    for port in "${ports[@]}"; do
-      run ufw allow "$port/tcp"
-    done
   fi
 
   local port listening=true

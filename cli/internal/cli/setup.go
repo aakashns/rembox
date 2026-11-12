@@ -39,14 +39,23 @@ as the user you log in as, it:
      user you log in as, and asks you for a password for it, if it has none.
      sudo asks for it, so programs running as your user, like coding agents,
      can't run commands as root without you.
-  4. Sets sshd to listen on the new port too, and let in only keys.
+  4. Sets sshd to listen on the new port too, and let in only keys, and ufw,
+     if it's on, to let in the new port.
 
 rembox then saves the server with your user and the new port, and logs in
 with them, which shows they work. Then setup.sh:
 
   5. Sets sshd to listen only on the new port, with no root login.
-  6. Sets up fail2ban to ban IP addresses that keep failing to log in.
-  7. Asks to restart the server, if an update needs it.
+  6. Turns on ufw, the firewall, to block every incoming connection but ssh
+     on the new port, over IPv4 and IPv6. It deletes ufw's rules for port 22,
+     and asks whether to keep each of its other rules that let something in.
+  7. Sets up fail2ban to ban IP addresses that keep failing to log in.
+  8. Asks to restart the server, if an update needs it.
+
+To reach a program on the server, like a dev server or database, forward its
+port over ssh: 'ssh -L 3000:localhost:3000 NAME' makes localhost:3000 on this
+machine reach port 3000 on the server. Docker's published ports get past ufw,
+so publish them on 127.0.0.1 only, like 'docker run -p 127.0.0.1:3000:3000'.
 
 ssh asks you to check the server's host key again the first time it logs in
 on the new port. If it can't log in there, open the port in your cloud
