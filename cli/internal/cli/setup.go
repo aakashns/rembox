@@ -13,15 +13,29 @@ import (
 	"strings"
 
 	"github.com/aakashns/rembox/cli/internal/config"
+	"github.com/aakashns/rembox/cli/internal/remote"
 )
 
-const setupHelp = `Usage: rembox setup [--host HOST] [--user USER] [--key PATH] [--name NAME]
+const setupHelp = `Usage: rembox setup [--host HOST] [--user USER] [--key PATH] [--name NAME] [--yes]
 
-Add a server to rembox. Asks for the server's IP address or hostname, the user
-to log in as (root, by default), the SSH key to log in with, and a name for it
-(its hostname, by default). Then it checks that ssh can log in with that key,
-and saves the server so that 'rembox list' shows it. Nothing is saved if ssh
-can't log in.
+Get a server ready for development, in steps, explaining each one and
+showing every command it runs:
+
+  1. Log in    Ask which server, the user to log in as (root, by default),
+               the SSH key to log in with, and a name for the server (its
+               hostname, by default). Check that ssh can log in, and save
+               the server, so 'rembox list' and 'rembox ssh' know it.
+               Nothing is saved if ssh can't log in.
+  2. Check     See what system, processor, memory and disk the server has,
+               and that rembox can set it up: so far, Ubuntu or Debian.
+  3. Update    Install the latest version of every package, then restart
+               the server if an update needs it. Asks before each. Unless
+               it logs in as root, rembox does these with sudo, which may
+               ask for the user's password on the server.
+
+Run it again any time, as often as you like: each step looks at the server
+as it is now and changes only what needs changing. rembox doesn't keep
+anything about the server but how to log in to it.
 
 The first time you connect to a server, ssh adds its host key to
 ~/.ssh/known_hosts; if the key later changes, ssh refuses to connect.
@@ -35,7 +49,11 @@ Flags:
   --key PATH    The SSH private key to log in with (default ~/.ssh/id_ed25519,
                 or another key in ~/.ssh)
   --name NAME   What to call the server in rembox
+  -y, --yes     Install updates, and restart if needed, without asking
 `
+
+// setupSteps is how many steps setup has.
+const setupSteps = 3
 
 // defaultKeys are the private keys setup offers, in order of preference.
 var defaultKeys = []string{"id_ed25519", "id_ecdsa", "id_rsa"}
@@ -43,37 +61,127 @@ var defaultKeys = []string{"id_ed25519", "id_ecdsa", "id_rsa"}
 func runSetup(a *App, args []string) error {
 	fs := flag.NewFlagSet("setup", flag.ContinueOnError)
 	var hostFlag, userFlag, keyFlag, nameFlag string
+	var yes bool
 	fs.StringVar(&hostFlag, "host", "", "")
 	fs.StringVar(&userFlag, "user", "", "")
 	fs.StringVar(&keyFlag, "key", "", "")
 	fs.StringVar(&nameFlag, "name", "", "")
+	fs.BoolVar(&yes, "y", false, "")
+	fs.BoolVar(&yes, "yes", false, "")
 	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
-	dir, err := a.ConfigDir()
+
+	fmt.Fprintln(a.Stdout, wrap(fmt.Sprintf("rembox setup gets a server ready for development, in %d steps: "+
+		"log in, check the server, and install updates. It explains each step, and shows every command "+
+		"it runs. You can run it again any time.", setupSteps), ""))
+
+	s, err := a.setupLogin(hostFlag, userFlag, keyFlag, nameFlag)
 	if err != nil {
 		return err
+	}
+	opts, err := a.sshOptions(s)
+	if err != nil {
+		return err
+	}
+
+	a.stage(2, setupSteps, "Check the server",
+		"rembox runs a short script on the server that reports its system, processor, memory and disk, "+
+			"to see whether rembox can set it up. The script changes nothing, and rembox doesn't keep "+
+			"what it finds; it checks again every time.")
+	m, err := a.probe(s, opts)
+	if err != nil {
+		return err
+	}
+	a.showMachine(m)
+	if problems := m.Problems(); len(problems) > 0 {
+		for _, p := range problems {
+			a.note(p)
+		}
+		return fmt.Errorf("can't set up %s yet, as the check above says", s.Name)
+	}
+	a.done("rembox can set up this server.")
+
+	a.stage(3, setupSteps, "Install updates",
+		"rembox runs a script on the server that installs the latest version of every package with apt, "+
+			"so it starts out with the latest security fixes. It keeps the server's config files as they "+
+			"are. If everything is up to date already, it changes nothing.")
+	if m.UID != 0 {
+		fmt.Fprintln(a.Stdout, "\n"+wrap(fmt.Sprintf("Installing packages needs root, and rembox logged in as %s, "+
+			"so it runs the script with sudo, which may ask for %s's password on the server.", m.User, m.User), ""))
+	}
+	if !yes {
+		fmt.Fprintln(a.Stdout)
+		ok, err := a.confirm(fmt.Sprintf("Install updates on %s now?", s.Name), true)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			a.note("Skipped installing updates. To install them later, run rembox setup again.")
+			return nil
+		}
+	}
+	if err := a.runAsRoot(s, opts, m, remote.Update); err != nil {
+		return err
+	}
+	a.done("Every package is up to date.")
+
+	fmt.Fprintln(a.Stdout, "\n"+wrap("Some updates, like a new kernel, only take effect once the server "+
+		"restarts. To see if any did, rembox checks the server again:", ""))
+	if m, err = a.probe(s, opts); err != nil {
+		return err
+	}
+	if !m.RebootRequired {
+		a.done("No restart needed.")
+	} else {
+		fmt.Fprintln(a.Stdout, "\n"+wrap(fmt.Sprintf("%s needs to restart to finish the updates. Restarting "+
+			"ends any sessions on it, and takes a minute or so.", s.Name), ""))
+		err := a.restart(s, opts, m, yes)
+		if errors.Is(err, errDeclined) {
+			a.note(fmt.Sprintf("Not restarted. To restart %s later: rembox ssh %s systemctl reboot", s.Name, s.Name))
+		} else if err != nil {
+			return err
+		}
+	}
+
+	fmt.Fprintf(a.Stdout, "\n\n%s %s\n", a.paint(green, "==>"),
+		a.paint(bold, fmt.Sprintf("%s is set up. To log in: rembox ssh %s", s.Name, s.Name)))
+	return nil
+}
+
+// setupLogin is setup's first step: it asks which server, checks that ssh can
+// log in to it, and saves it.
+func (a *App) setupLogin(hostFlag, userFlag, keyFlag, nameFlag string) (config.Server, error) {
+	var s config.Server
+	dir, err := a.ConfigDir()
+	if err != nil {
+		return s, err
 	}
 	home, err := a.HomeDir()
 	if err != nil {
-		return fmt.Errorf("can't find your home folder: %w", err)
+		return s, fmt.Errorf("can't find your home folder: %w", err)
 	}
 
-	var s config.Server
+	a.stage(1, setupSteps, "Log in",
+		"rembox logs in to the server with ssh and an SSH key. It asks which server, the user to log in "+
+			"as and the key, then checks that ssh can log in, and saves the server so 'rembox list' and "+
+			"'rembox ssh' know it. Nothing is saved if ssh can't log in.")
+	if a.Interactive {
+		fmt.Fprintln(a.Stdout)
+	}
 	s.Host, err = a.answer("host", hostFlag, "Server IP address or hostname", "", checkHost)
 	if err != nil {
-		return err
+		return s, err
 	}
 	s.User, err = a.answer("user", userFlag, "User to log in as", "root", checkUser)
 	if err != nil {
-		return err
+		return s, err
 	}
-
 	s.Key, err = a.answer("key", keyFlag, "SSH private key", defaultKey(home), func(p string) (string, error) {
 		return checkKey(home, p)
 	})
 	if err != nil {
-		return err
+		return s, err
 	}
 
 	defName := ""
@@ -85,21 +193,23 @@ func runSetup(a *App, args []string) error {
 			return n, config.CheckName(n)
 		})
 		if err != nil {
-			return err
+			return s, err
 		}
-		taken, err := config.HasServer(dir, s.Name)
+		saved, err := config.LoadServer(dir, s.Name)
+		if errors.Is(err, fs.ErrNotExist) || (err == nil && saved == s) {
+			break // a new server, or the same one again
+		}
 		if err != nil {
-			return err
-		}
-		if !taken {
-			break
+			return s, err
 		}
 		if !a.Interactive {
-			return fmt.Errorf("there's already a server named %s; pick another --name", s.Name)
+			return s, fmt.Errorf("there's already a server named %s, which logs in to %s; pick another --name",
+				s.Name, saved.Destination())
 		}
-		replace, err := a.confirm(fmt.Sprintf("There's already a server named %s. Replace it?", s.Name), false)
+		replace, err := a.confirm(fmt.Sprintf("There's already a server named %s, which logs in to %s with %s. Replace it?",
+			s.Name, saved.Destination(), tildePath(home, saved.Key)), false)
 		if err != nil {
-			return err
+			return s, err
 		}
 		if replace {
 			break
@@ -107,20 +217,23 @@ func runSetup(a *App, args []string) error {
 		nameFlag, defName = "", ""
 	}
 
-	fmt.Fprintf(a.Stdout, "Checking that ssh can log in to %s...\n", s.Destination())
-	if err := a.run("ssh", sshArgs(s, a.Interactive)...); err != nil {
+	opts, err := a.sshOptions(s)
+	if err != nil {
+		return s, err
+	}
+	fmt.Fprintf(a.Stdout, "\nChecking that ssh can log in to %s:\n", s.Destination())
+	if err := a.run("ssh", append(opts, "--", s.Destination(), "true")...); err != nil {
 		if errors.Is(err, exec.ErrNotFound) {
-			return errors.New("can't find ssh; install OpenSSH and run rembox setup again")
+			return s, errors.New("can't find ssh; install OpenSSH and run rembox setup again")
 		}
-		return fmt.Errorf("ssh couldn't log in to %s with %s (%v). Check the address, user and key, "+
+		return s, fmt.Errorf("ssh couldn't log in to %s with %s (%v). Check the address, user and key, "+
 			"then run rembox setup again. Nothing was saved", s.Destination(), tildePath(home, s.Key), err)
 	}
 	if err := config.SaveServer(dir, s); err != nil {
-		return fmt.Errorf("saving %s: %w", s.Name, err)
+		return s, fmt.Errorf("saving %s: %w", s.Name, err)
 	}
-	fmt.Fprintln(a.Stdout, a.paint(green, fmt.Sprintf("Logged in. Saved %s (%s);", s.Name, s.Destination()))+
-		" 'rembox list' shows your servers.")
-	return nil
+	a.done(fmt.Sprintf("Logged in, and saved the server as %s (%s).", s.Name, s.Destination()))
+	return s, nil
 }
 
 // answer returns the flag's value if it was given, or else asks question
@@ -215,21 +328,6 @@ func defaultKey(home string) string {
 		}
 	}
 	return ""
-}
-
-// sshArgs are the arguments for ssh to log in to s with its key and do
-// nothing, to check that it can.
-func sshArgs(s config.Server, interactive bool) []string {
-	args := append(keyArgs(s),
-		"-o", "PasswordAuthentication=no",
-		"-o", "KbdInteractiveAuthentication=no",
-		"-o", "StrictHostKeyChecking=accept-new",
-		"-o", "ConnectTimeout=15",
-	)
-	if !interactive {
-		args = append(args, "-o", "BatchMode=yes") // no one to type a key's passphrase
-	}
-	return append(args, "--", s.Destination(), "true")
 }
 
 // keyArgs are the ssh arguments to log in to s with its key.

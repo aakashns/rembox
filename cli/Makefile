@@ -22,10 +22,16 @@ build: ## Build bin/rembox for this machine
 test: ## Run the tests (including install.sh's, against a pretend release)
 	go test -race ./...
 
-lint: ## Check formatting, vet the code, and shellcheck install.sh
+lint: ## Check formatting, vet the code, and shellcheck install.sh and the server scripts
 	@test -z "$$(gofmt -l .)" || { echo "Needs gofmt:"; gofmt -l .; exit 1; }
 	go vet ./...
 	shellcheck ../site/public/install.sh
+	@# Each server script is checked as rembox sends it: after lib.sh.
+	@for s in internal/remote/*.sh; do \
+	  [ "$$s" = internal/remote/lib.sh ] && continue; \
+	  echo "shellcheck $$s"; \
+	  { cat internal/remote/lib.sh; echo; cat "$$s"; } | shellcheck -s bash - || exit 1; \
+	done
 
 dist: ## Build every platform's binary and SHA256SUMS into dist/, as a release has them
 	rm -rf dist && mkdir -p dist

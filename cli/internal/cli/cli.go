@@ -41,7 +41,12 @@ type App struct {
 	// Command runs a program at the terminal. Run commands with App.run,
 	// which shows them first.
 	Command func(name string, args ...string) error
-	Euid    int // 0 when run as root
+	// Pipe runs a program with the given stdin (nil for none), stdout and
+	// stderr, as for sending a script to ssh and reading what it prints. Show
+	// the command first, as App.run does.
+	Pipe  func(stdin io.Reader, stdout, stderr io.Writer, name string, args ...string) error
+	Sleep func(time.Duration)
+	Euid  int // 0 when run as root
 
 	in *bufio.Reader // Stdin, shared by every question
 }
@@ -63,6 +68,8 @@ func Main() int {
 		HomeDir:     os.UserHomeDir,
 		Now:         time.Now,
 		Command:     atTerminal,
+		Pipe:        piped,
+		Sleep:       time.Sleep,
 		Euid:        os.Geteuid(),
 	}
 	return app.Run(os.Args[1:])
@@ -73,6 +80,15 @@ func Main() int {
 func atTerminal(name string, args ...string) error {
 	cmd := exec.Command(name, args...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	return cmd.Run()
+}
+
+// piped runs a command with the given stdin, stdout and stderr. Programs it
+// runs can still ask things at the terminal, as ssh does for a key's
+// passphrase.
+func piped(stdin io.Reader, stdout, stderr io.Writer, name string, args ...string) error {
+	cmd := exec.Command(name, args...)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = stdin, stdout, stderr
 	return cmd.Run()
 }
 
@@ -105,12 +121,17 @@ func (a *App) runConfirmed(yes bool, name string, args ...string) error {
 }
 
 func (a *App) showCommand(name string, args []string) {
+	// A blank line sets the command apart from rembox's own output.
+	fmt.Fprintf(a.Stdout, "\n%s\n", a.paint(cyan, commandLine(name, args)))
+}
+
+// commandLine is a command as you could paste it into a shell, after a $.
+func commandLine(name string, args []string) string {
 	words := []string{"$", shellQuote(name)}
 	for _, arg := range args {
 		words = append(words, shellQuote(arg))
 	}
-	// A blank line sets the command apart from rembox's own output.
-	fmt.Fprintf(a.Stdout, "\n%s\n", a.paint(cyan, strings.Join(words, " ")))
+	return strings.Join(words, " ")
 }
 
 var shellSafe = regexp.MustCompile(`^[A-Za-z0-9_@%+=:,./-]+$`)
@@ -137,6 +158,7 @@ func useColor(f *os.File) bool {
 // ANSI styles for paint.
 const (
 	bold   = "1"
+	dim    = "2"
 	red    = "31"
 	green  = "32"
 	yellow = "33"
@@ -154,6 +176,42 @@ func paint(on bool, style, s string) string {
 		return s
 	}
 	return "\x1b[" + style + "m" + s + "\x1b[0m"
+}
+
+// stage starts step n of a command's total steps: its title, then what it
+// does and why.
+func (a *App) stage(n, total int, title, about string) {
+	fmt.Fprintf(a.Stdout, "\n\n%s %s\n%s\n", a.paint(cyan, "==>"),
+		a.paint(bold, fmt.Sprintf("Step %d of %d: %s", n, total, title)), wrap(about, "    "))
+}
+
+// done says that something worked.
+func (a *App) done(msg string) {
+	fmt.Fprintf(a.Stdout, "\n%s %s\n", a.paint(green, "✓"), msg)
+}
+
+// note says something worth knowing that isn't a problem, or a problem
+// rembox carries on after.
+func (a *App) note(msg string) {
+	fmt.Fprintf(a.Stdout, "\n%s\n", a.paint(yellow, wrap("! "+msg, "  ")[2:]))
+}
+
+// wrap fills text into lines of at most 76 characters (where words allow),
+// each starting with indent.
+func wrap(text, indent string) string {
+	var lines []string
+	line := indent
+	for _, w := range strings.Fields(text) {
+		if line != indent && len(line)+1+len(w) > 76 {
+			lines = append(lines, line)
+			line = indent
+		}
+		if line != indent {
+			line += " "
+		}
+		line += w
+	}
+	return strings.Join(append(lines, line), "\n")
 }
 
 // Exit codes.
@@ -175,7 +233,7 @@ func commands() []command {
 	return []command{
 		{
 			name:    "setup",
-			summary: "Add a server, checking that ssh can log in to it",
+			summary: "Add a server and get it ready: check it, then install updates",
 			help:    setupHelp,
 			run:     runSetup,
 		},
@@ -190,6 +248,12 @@ func commands() []command {
 			summary: "Log in to a server you've added, or run a command on it",
 			help:    sshHelp,
 			run:     runSSH,
+		},
+		{
+			name:    "info",
+			summary: "Show what kind of machine a server is",
+			help:    infoHelp,
+			run:     runInfo,
 		},
 		{
 			name:    "help",

@@ -49,7 +49,9 @@ func CountFiles(dir string) (n int, exists bool, err error) {
 
 // Backup writes dir to a new .tar.gz at dest, readable only by you since it
 // may hold secrets. Paths in it start with dir's name (e.g. "rembox/..."), and
-// symlinks are stored as links, not followed.
+// symlinks are stored as links, not followed. Sockets (like ssh's, for a
+// connection rembox shares between commands) are left out, as tar can't hold
+// them.
 func Backup(dir, dest string) (err error) {
 	f, err := os.OpenFile(dest, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
@@ -74,6 +76,9 @@ func Backup(dir, dest string) (err error) {
 		info, err := d.Info()
 		if err != nil {
 			return err
+		}
+		if info.Mode()&fs.ModeSocket != 0 {
+			return nil
 		}
 		link := ""
 		if info.Mode()&fs.ModeSymlink != 0 {

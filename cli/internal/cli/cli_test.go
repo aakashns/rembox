@@ -3,14 +3,18 @@ package cli
 import (
 	"bytes"
 	"fmt"
+	"io"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/aakashns/rembox/cli/internal/release"
 	"github.com/aakashns/rembox/cli/internal/release/releasetest"
+	"github.com/aakashns/rembox/cli/internal/remote"
 	"github.com/aakashns/rembox/cli/internal/version"
 )
 
@@ -26,6 +30,43 @@ type testApp struct {
 	sshErr         error                     // what ssh returns
 	onSudo         func(args []string) error // replaces the fake sudo, which removes its last arg
 	srv            *releasetest.Server
+
+	// The fake server that Pipe's ssh commands reach.
+	probeOut string                                                     // what probe.sh prints; facts() by default
+	onPipe   func(script string, args []string, stdout io.Writer) error // replaces the fake server
+	scripts  []string                                                   // the scripts sent, by name
+	sleeps   int
+}
+
+// facts is what probe.sh prints for a server rembox can set up, with
+// overrides like "uid=1000".
+func facts(overrides ...string) string {
+	f := map[string]string{
+		"os_id": "ubuntu", "os_version": "26.04", "os_name": "Ubuntu 26.04.1 LTS",
+		"arch": "arm64", "kernel": "7.0.0-10-generic", "hostname": "box", "virt": "kvm",
+		"cpus": "2", "memory_kb": "3905536", "swap_kb": "0", "disk_kb": "39634756", "disk_free_kb": "36870728",
+		"user": "root", "uid": "0", "sudo": "yes", "apt": "yes", "systemd": "yes", "reboot_required": "no",
+		"boot_id": "boot-1",
+	}
+	for _, o := range overrides {
+		k, v, _ := strings.Cut(o, "=")
+		f[k] = v
+	}
+	var b strings.Builder
+	for _, k := range slices.Sorted(maps.Keys(f)) {
+		fmt.Fprintf(&b, "fact %s=%s\n", k, f[k])
+	}
+	return b.String()
+}
+
+// scriptName is the name of the rembox script body is, or "".
+func scriptName(body string) string {
+	for _, s := range []remote.Script{remote.Probe, remote.Update} {
+		if body == s.Body {
+			return s.Name
+		}
+	}
+	return ""
 }
 
 // newTestApp returns an App running as version current, installed at a temp
@@ -76,8 +117,40 @@ func newTestApp(t *testing.T, current string) *testApp {
 			}
 			return fmt.Errorf("the tests don't fake %s", name)
 		},
-		Euid: 1000,
+		Pipe: func(stdin io.Reader, stdout, stderr io.Writer, name string, args ...string) error {
+			ta.commands = append(ta.commands, append([]string{name}, args...))
+			script := ""
+			if stdin != nil {
+				b, err := io.ReadAll(stdin)
+				if err != nil {
+					return err
+				}
+				script = scriptName(string(b))
+				if script == "" {
+					return fmt.Errorf("the tests don't fake sending %q", b)
+				}
+				ta.scripts = append(ta.scripts, script)
+			}
+			if name != "ssh" {
+				return fmt.Errorf("the tests don't fake %s", name)
+			}
+			if ta.onPipe != nil {
+				return ta.onPipe(script, args, stdout)
+			}
+			switch script {
+			case "probe.sh":
+				fmt.Fprint(stdout, ta.probeOut)
+			case "update.sh":
+				fmt.Fprintln(stdout, "(what update.sh prints)")
+			default:
+				return fmt.Errorf("the tests don't fake ssh %q", args)
+			}
+			return nil
+		},
+		Sleep: func(time.Duration) { ta.sleeps++ },
+		Euid:  1000,
 	}
+	ta.probeOut = facts()
 	return ta
 }
 
@@ -96,7 +169,7 @@ func TestHelp(t *testing.T) {
 		if code := ta.Run(args); code != 0 {
 			t.Errorf("rembox %v: exit %d", args, code)
 		}
-		for _, want := range []string{"Usage:", "setup", "list", "ssh", "help", "version", "upgrade", "implode"} {
+		for _, want := range []string{"Usage:", "setup", "list", "ssh", "info", "help", "version", "upgrade", "implode"} {
 			if !strings.Contains(ta.stdout.String(), want) {
 				t.Errorf("rembox %v: output missing %q:\n%s", args, want, ta.stdout)
 			}
