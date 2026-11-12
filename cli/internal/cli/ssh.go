@@ -29,7 +29,7 @@ func runSSH(a *App, args []string) error {
 	}
 	command := args[1:]
 
-	sshArgs := append(keyArgs(s), "--", s.Destination())
+	sshArgs := append(loginArgs(s), "--", s.Destination())
 	err = a.run("ssh", append(sshArgs, command...)...)
 	var ee *exec.ExitError
 	switch {

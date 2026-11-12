@@ -1,7 +1,8 @@
 // Package remote holds the scripts rembox runs on servers.
 //
 // rembox runs a script with `bash -c` over ssh, so nothing is copied to the
-// server. Each script is lib.sh followed by the script itself.
+// server. Each script is lib.sh, then the files with the functions for its
+// steps, then the script itself, which calls them.
 package remote
 
 import (
@@ -16,31 +17,33 @@ var files embed.FS
 
 // Script is a script rembox runs on servers.
 type Script struct {
-	Name string // its file, like setup.sh
-	Body string // lib.sh, then the script
+	Name  string   // its file, like setup.sh
+	Files []string // the files it's made of, in order: lib.sh, its steps, then Name
+	Body  string   // the files, one after another
 }
 
-// Setup gets a server ready for development: it checks that rembox can set it
-// up, then installs updates.
-var Setup = load("setup.sh")
+// Setup gets a server ready for development.
+var Setup = load("setup.sh", "check.sh", "update.sh", "user.sh", "sshd.sh", "fail2ban.sh", "restart.sh")
 
-func load(name string) Script {
-	lib, err := files.ReadFile("lib.sh")
-	if err != nil {
-		panic(err)
+func load(name string, steps ...string) Script {
+	s := Script{Name: name, Files: append(append([]string{"lib.sh"}, steps...), name)}
+	parts := make([]string, len(s.Files))
+	for i, f := range s.Files {
+		b, err := files.ReadFile(f)
+		if err != nil {
+			panic(err)
+		}
+		parts[i] = string(b)
 	}
-	body, err := files.ReadFile(name)
-	if err != nil {
-		panic(err)
-	}
-	return Script{Name: name, Body: string(lib) + "\n" + string(body)}
+	s.Body = strings.Join(parts, "\n")
+	return s
 }
 
-// URL is where to read the script, as this version of rembox has it.
-func (s Script) URL() string {
+// URL is where to read the scripts, as this version of rembox has them.
+func URL() string {
 	ref := "main" // development builds
 	if version.Valid(version.Version) && !strings.Contains(version.Version, "-") {
 		ref = "v" + version.Version
 	}
-	return "https://github.com/aakashns/rembox/blob/" + ref + "/cli/internal/remote/" + s.Name
+	return "https://github.com/aakashns/rembox/tree/" + ref + "/cli/internal/remote"
 }

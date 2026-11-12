@@ -17,9 +17,13 @@ import (
 type Server struct {
 	Name string `json:"-"` // from the file's name
 	Host string `json:"host"`
+	Port int    `json:"port"` // ssh's port
 	User string `json:"user"`
 	Key  string `json:"key"` // absolute path of the SSH private key
 }
+
+// DefaultPort is ssh's usual port, and the port of servers saved without one.
+const DefaultPort = 22
 
 // Destination is the server as ssh takes it: user@host.
 func (s Server) Destination() string { return s.User + "@" + s.Host }
@@ -120,6 +124,12 @@ func readServer(path string) (Server, error) {
 	}
 	if s.Host == "" || s.User == "" {
 		return s, fmt.Errorf("reading %s: no host or user", path)
+	}
+	if s.Port == 0 {
+		s.Port = DefaultPort // saved by rembox 0.6.0 or earlier
+	}
+	if s.Port < 1 || s.Port > 65535 {
+		return s, fmt.Errorf("reading %s: port %d isn't between 1 and 65535", path, s.Port)
 	}
 	return s, nil
 }

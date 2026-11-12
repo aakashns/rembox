@@ -74,6 +74,8 @@ func newTestApp(t *testing.T, current string) *testApp {
 		GOARCH:     "amd64",
 		ConfigDir:  func() (string, error) { return ta.configDir, nil },
 		HomeDir:    func() (string, error) { return home, nil },
+		Username:   "ada",
+		NewPort:    func() int { return 23456 },
 		Command: func(stdout io.Writer, name string, args ...string) error {
 			ta.commands = append(ta.commands, append([]string{name}, args...))
 			switch name {

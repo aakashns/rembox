@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"os"
 	"os/exec"
 	"regexp"
@@ -34,6 +35,8 @@ type App struct {
 
 	ConfigDir func() (string, error) // where rembox keeps its files
 	HomeDir   func() (string, error) // for ~/.ssh
+	Username  string                 // yours on this machine, for your user on servers
+	NewPort   func() int             // a port to offer to move ssh to
 
 	// Command runs a program at the terminal, with its output going to stdout.
 	// Show the command first, as App.run does.
@@ -56,6 +59,8 @@ func Main() int {
 		GOARCH:     runtime.GOARCH,
 		ConfigDir:  config.Dir,
 		HomeDir:    os.UserHomeDir,
+		Username:   os.Getenv("USER"),
+		NewPort:    func() int { return 10000 + rand.IntN(22768) }, // 10000-32767, below Linux's ports for outgoing connections
 		Command:    atTerminal,
 		Euid:       os.Geteuid(),
 	}
@@ -188,7 +193,7 @@ func commands() []command {
 	return []command{
 		{
 			name:    "setup",
-			summary: "Add or change a server, and get it ready: check it, then install updates",
+			summary: "Add or change a server, and get it ready for development, securely",
 			help:    setupHelp,
 			run:     runSetup,
 		},

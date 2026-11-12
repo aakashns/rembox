@@ -1,5 +1,6 @@
-# lib.sh: what every rembox script starts with. rembox runs lib.sh followed by
-# a script with `bash -c` on the server, as one script.
+# lib.sh: what every rembox script starts with. rembox runs lib.sh, then the
+# files with each step's functions, then the script itself, with `bash -c` on
+# the server, as one script.
 #
 # Each script defines main and ends with `main "$@" </dev/null`, so no command
 # in it stops to read input; only confirm asks, at the terminal.
@@ -70,4 +71,28 @@ confirm() {
   printf '\n    %s%s%s [y/N] ' "$BOLD" "$1" "$RESET"
   read -r answer </dev/tty || true
   [[ ${answer,,} == y || ${answer,,} == yes ]]
+}
+
+# same FILE CONTENT: succeeds if FILE holds just CONTENT (and a newline).
+same() {
+  [[ -f $1 ]] && cmp -s "$1" <(printf '%s\n' "$2")
+}
+
+# put FILE MODE CONTENT [CHECK...]: shows CONTENT, then writes it to FILE, owned
+# by root, with MODE. If given, CHECK runs first with the new file's path at
+# the end, and FILE stays as it is unless CHECK succeeds.
+put() {
+  local file=$1 mode=$2 content=$3
+  shift 3
+  printf '\n    %s$ cat > %s%s\n' "$CYAN" "$file" "$RESET"
+  sed "s/^/      ${DIM}/; s/\$/${RESET}/" <<<"$content"
+  local new=$file.rembox-new
+  printf '%s\n' "$content" >"$new"
+  chown root:root "$new"
+  chmod "$mode" "$new"
+  if (($# > 0)) && ! run "$@" "$new"; then
+    rm -f "$new"
+    fail "$1 found a problem with $file, shown above, so it's unchanged."
+  fi
+  mv "$new" "$file"
 }

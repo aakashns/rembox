@@ -12,7 +12,7 @@ import (
 func (ta *testApp) withServers(t *testing.T, names ...string) {
 	t.Helper()
 	for _, n := range names {
-		if err := config.SaveServer(ta.configDir, config.Server{Name: n, Host: n + ".example.com", User: "dev", Key: "/k/" + n}); err != nil {
+		if err := config.SaveServer(ta.configDir, config.Server{Name: n, Host: n + ".example.com", Port: 2222, User: "dev", Key: "/k/" + n}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -23,11 +23,11 @@ func TestSSH(t *testing.T) {
 	ta.withServers(t, "a", "b")
 
 	ta.mustRun(t, "ssh", "b")
-	want := []string{"-i", "/k/b", "-o", "IdentitiesOnly=yes", "--", "dev@b.example.com"}
+	want := []string{"-p", "2222", "-i", "/k/b", "-o", "IdentitiesOnly=yes", "--", "dev@b.example.com"}
 	if !slices.Equal(ta.sshArgs, want) {
 		t.Errorf("ssh args %q, want %q", ta.sshArgs, want)
 	}
-	if !strings.Contains(ta.stdout.String(), "\n$ ssh -i /k/b -o IdentitiesOnly=yes -- dev@b.example.com\n") {
+	if !strings.Contains(ta.stdout.String(), "\n$ ssh -p 2222 -i /k/b -o IdentitiesOnly=yes -- dev@b.example.com\n") {
 		t.Errorf("output doesn't show the ssh command:\n%s", ta.stdout)
 	}
 

@@ -26,12 +26,9 @@ lint: ## Check formatting, vet the code, and shellcheck install.sh and the serve
 	@test -z "$$(gofmt -l .)" || { echo "Needs gofmt:"; gofmt -l .; exit 1; }
 	go vet ./...
 	shellcheck ../site/public/install.sh
-	@# Each server script is checked as rembox sends it: after lib.sh.
-	@for s in internal/remote/*.sh; do \
-	  [ "$$s" = internal/remote/lib.sh ] && continue; \
-	  echo "shellcheck $$s"; \
-	  { cat internal/remote/lib.sh; echo; cat "$$s"; } | shellcheck -s bash - || exit 1; \
-	done
+	@# The server scripts are checked as rembox sends setup.sh: lib.sh, the steps, then setup.sh.
+	cd internal/remote && for s in lib.sh $$(ls *.sh | grep -vx 'lib.sh\|setup.sh') setup.sh; do \
+	  cat "$$s"; echo; done | shellcheck -s bash -
 
 dist: ## Build every platform's binary and SHA256SUMS into dist/, as a release has them
 	rm -rf dist && mkdir -p dist
