@@ -32,10 +32,12 @@ func buildRembox(t *testing.T, version string) []byte {
 	return bin
 }
 
-// run runs a command against the pretend releases and returns its output.
-func run(t *testing.T, srv *releasetest.Server, env []string, name string, args ...string) string {
+// run runs a command against the pretend releases, with input as what the
+// user types, and returns its output.
+func run(t *testing.T, srv *releasetest.Server, env []string, input, name string, args ...string) string {
 	t.Helper()
 	cmd := exec.Command(name, args...)
+	cmd.Stdin = strings.NewReader(input)
 	cmd.Env = append(os.Environ(), release.BaseURLEnv+"="+srv.BaseURL())
 	cmd.Env = append(cmd.Env, env...)
 	out, err := cmd.CombinedOutput()
@@ -65,28 +67,28 @@ func TestInstallAndUpgrade(t *testing.T) {
 	env := []string{"REMBOX_INSTALL_DIR=" + dir}
 	rembox := filepath.Join(dir, "rembox")
 
-	out := run(t, srv, env, "sh", installScript)
+	out := run(t, srv, env, "", "sh", installScript)
 	if !strings.Contains(out, "Installed rembox 0.1.0") {
 		t.Fatalf("install.sh output:\n%s", out)
 	}
-	if out := run(t, srv, nil, rembox, "version"); !strings.HasPrefix(out, "rembox 0.1.0") {
+	if out := run(t, srv, nil, "", rembox, "version"); !strings.HasPrefix(out, "rembox 0.1.0") {
 		t.Fatalf("installed version: %s", out)
 	}
 
 	srv.AddRelease("v0.2.0", runtime.GOOS, runtime.GOARCH, buildRembox(t, "0.2.0"))
-	out = run(t, srv, nil, rembox, "upgrade", "--yes")
+	out = run(t, srv, nil, "y\n", rembox, "upgrade")
 	if !strings.Contains(out, "Upgraded rembox to 0.2.0") {
 		t.Fatalf("upgrade output:\n%s", out)
 	}
-	if out := run(t, srv, nil, rembox, "version"); !strings.HasPrefix(out, "rembox 0.2.0") {
+	if out := run(t, srv, nil, "", rembox, "version"); !strings.HasPrefix(out, "rembox 0.2.0") {
 		t.Fatalf("upgraded version: %s", out)
 	}
-	if out := run(t, srv, nil, rembox, "upgrade"); !strings.Contains(out, "already the latest") {
+	if out := run(t, srv, nil, "", rembox, "upgrade"); !strings.Contains(out, "already the latest") {
 		t.Fatalf("second upgrade output:\n%s", out)
 	}
 
 	// REMBOX_VERSION installs an older release over a newer one.
-	out = run(t, srv, append(env, "REMBOX_VERSION=v0.1.0"), "sh", installScript)
+	out = run(t, srv, append(env, "REMBOX_VERSION=v0.1.0"), "", "sh", installScript)
 	if !strings.Contains(out, "Installed rembox 0.1.0") {
 		t.Fatalf("install.sh with REMBOX_VERSION output:\n%s", out)
 	}

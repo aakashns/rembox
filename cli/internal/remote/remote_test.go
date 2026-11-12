@@ -26,7 +26,6 @@ fact sudo=yes
 fact apt=yes
 fact systemd=yes
 fact reboot_required=no
-fact boot_id=b-1=2
 `
 
 func TestParse(t *testing.T) {
@@ -36,7 +35,7 @@ func TestParse(t *testing.T) {
 	}
 	want := Machine{OSID: "ubuntu", OSVersion: "26.04", OSName: "Ubuntu 26.04.1 LTS", Arch: "arm64",
 		Kernel: "7.0.0-10-generic", Hostname: "box", Virt: "kvm", CPUs: 2, MemoryKB: 3905536,
-		DiskKB: 39634756, DiskFreeKB: 36870728, User: "root", Sudo: true, APT: true, Systemd: true, BootID: "b-1=2"}
+		DiskKB: 39634756, DiskFreeKB: 36870728, User: "root", Sudo: true, APT: true, Systemd: true}
 	if m != want {
 		t.Errorf("got %+v\nwant %+v", m, want)
 	}
@@ -89,8 +88,7 @@ func TestProbeRuns(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("probe.sh runs on Linux")
 	}
-	cmd := exec.Command("bash", "-s")
-	cmd.Stdin = strings.NewReader(Probe.Body)
+	cmd := exec.Command("bash", "-c", Probe.Body, "bash") // as rembox runs it
 	out, err := cmd.Output()
 	if err != nil {
 		t.Fatalf("probe.sh: %v\n%s", err, out)
@@ -99,7 +97,7 @@ func TestProbeRuns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%v\n%s", err, out)
 	}
-	if m.CPUs < 1 || m.MemoryKB <= 0 || m.DiskKB <= 0 || m.BootID == "" || m.Kernel == "" {
+	if m.CPUs < 1 || m.MemoryKB <= 0 || m.DiskKB <= 0 || m.Kernel == "" {
 		t.Errorf("unlikely facts: %+v", m)
 	}
 }

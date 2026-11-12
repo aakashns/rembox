@@ -16,7 +16,7 @@ import (
 	"github.com/aakashns/rembox/cli/internal/remote"
 )
 
-const setupHelp = `Usage: rembox setup [--host HOST] [--user USER] [--key PATH] [--name NAME] [--yes]
+const setupHelp = `Usage: rembox setup
 
 Get a server ready for development, in steps, explaining each one and
 showing every command it runs:
@@ -37,19 +37,9 @@ Run it again any time, as often as you like: each step looks at the server
 as it is now and changes only what needs changing. rembox doesn't keep
 anything about the server but how to log in to it.
 
-The first time you connect to a server, ssh adds its host key to
-~/.ssh/known_hosts; if the key later changes, ssh refuses to connect.
-
-Flags answer the questions up front. Without a terminal, setup uses the
-defaults for any question a flag doesn't answer, and fails if there isn't one.
-
-Flags:
-  --host HOST   The server's IP address or hostname
-  --user USER   The user to log in as (default root)
-  --key PATH    The SSH private key to log in with (default ~/.ssh/id_ed25519,
-                or another key in ~/.ssh)
-  --name NAME   What to call the server in rembox
-  -y, --yes     Install updates, and restart if needed, without asking
+The first time you connect to a server, ssh asks you to check its host key,
+then adds it to ~/.ssh/known_hosts; if the key later changes, ssh refuses to
+connect.
 `
 
 // setupSteps is how many steps setup has.
@@ -59,16 +49,7 @@ const setupSteps = 3
 var defaultKeys = []string{"id_ed25519", "id_ecdsa", "id_rsa"}
 
 func runSetup(a *App, args []string) error {
-	fs := flag.NewFlagSet("setup", flag.ContinueOnError)
-	var hostFlag, userFlag, keyFlag, nameFlag string
-	var yes bool
-	fs.StringVar(&hostFlag, "host", "", "")
-	fs.StringVar(&userFlag, "user", "", "")
-	fs.StringVar(&keyFlag, "key", "", "")
-	fs.StringVar(&nameFlag, "name", "", "")
-	fs.BoolVar(&yes, "y", false, "")
-	fs.BoolVar(&yes, "yes", false, "")
-	if err := parseFlags(fs, args); err != nil {
+	if err := parseFlags(flag.NewFlagSet("setup", flag.ContinueOnError), args); err != nil {
 		return err
 	}
 
@@ -76,11 +57,7 @@ func runSetup(a *App, args []string) error {
 		"log in, check the server, and install updates. It explains each step, and shows every command "+
 		"it runs. You can run it again any time.", setupSteps), ""))
 
-	s, err := a.setupLogin(hostFlag, userFlag, keyFlag, nameFlag)
-	if err != nil {
-		return err
-	}
-	opts, err := a.sshOptions(s)
+	s, err := a.setupLogin()
 	if err != nil {
 		return err
 	}
@@ -89,7 +66,7 @@ func runSetup(a *App, args []string) error {
 		"rembox runs a short script on the server that reports its system, processor, memory and disk, "+
 			"to see whether rembox can set it up. The script changes nothing, and rembox doesn't keep "+
 			"what it finds; it checks again every time.")
-	m, err := a.probe(s, opts)
+	m, err := a.probe(s)
 	if err != nil {
 		return err
 	}
@@ -110,25 +87,19 @@ func runSetup(a *App, args []string) error {
 		fmt.Fprintln(a.Stdout, "\n"+wrap(fmt.Sprintf("Installing packages needs root, and rembox logged in as %s, "+
 			"so it runs the script with sudo, which may ask for %s's password on the server.", m.User, m.User), ""))
 	}
-	if !yes {
-		fmt.Fprintln(a.Stdout)
-		ok, err := a.confirm(fmt.Sprintf("Install updates on %s now?", s.Name), true)
-		if err != nil {
-			return err
-		}
-		if !ok {
-			a.note("Skipped installing updates. To install them later, run rembox setup again.")
-			return nil
-		}
+	fmt.Fprintln(a.Stdout)
+	if !a.confirm(fmt.Sprintf("Install updates on %s now?", s.Name), true) {
+		a.note("Skipped installing updates. To install them later, run rembox setup again.")
+		return nil
 	}
-	if err := a.runAsRoot(s, opts, m, remote.Update); err != nil {
+	if err := a.runScript(s, asRoot(s, m, "bash", "-c"), remote.Update, a.Stdout); err != nil {
 		return err
 	}
 	a.done("Every package is up to date.")
 
 	fmt.Fprintln(a.Stdout, "\n"+wrap("Some updates, like a new kernel, only take effect once the server "+
 		"restarts. To see if any did, rembox checks the server again:", ""))
-	if m, err = a.probe(s, opts); err != nil {
+	if m, err = a.probe(s); err != nil {
 		return err
 	}
 	if !m.RebootRequired {
@@ -136,11 +107,18 @@ func runSetup(a *App, args []string) error {
 	} else {
 		fmt.Fprintln(a.Stdout, "\n"+wrap(fmt.Sprintf("%s needs to restart to finish the updates. Restarting "+
 			"ends any sessions on it, and takes a minute or so.", s.Name), ""))
-		err := a.restart(s, opts, m, yes)
-		if errors.Is(err, errDeclined) {
-			a.note(fmt.Sprintf("Not restarted. To restart %s later: rembox ssh %s systemctl reboot", s.Name, s.Name))
-		} else if err != nil {
+		err := a.restart(s, m)
+		switch {
+		case errors.Is(err, errDeclined):
+			reboot := "systemctl reboot"
+			if m.UID != 0 {
+				reboot = "sudo " + reboot
+			}
+			a.note(fmt.Sprintf("Not restarted. To restart %s later: rembox ssh %s %s", s.Name, s.Name, reboot))
+		case err != nil:
 			return err
+		default:
+			a.done(fmt.Sprintf("%s is restarting, which takes a minute or so.", s.Name))
 		}
 	}
 
@@ -151,7 +129,7 @@ func runSetup(a *App, args []string) error {
 
 // setupLogin is setup's first step: it asks which server, checks that ssh can
 // log in to it, and saves it.
-func (a *App) setupLogin(hostFlag, userFlag, keyFlag, nameFlag string) (config.Server, error) {
+func (a *App) setupLogin() (config.Server, error) {
 	var s config.Server
 	dir, err := a.ConfigDir()
 	if err != nil {
@@ -166,18 +144,16 @@ func (a *App) setupLogin(hostFlag, userFlag, keyFlag, nameFlag string) (config.S
 		"rembox logs in to the server with ssh and an SSH key. It asks which server, the user to log in "+
 			"as and the key, then checks that ssh can log in, and saves the server so 'rembox list' and "+
 			"'rembox ssh' know it. Nothing is saved if ssh can't log in.")
-	if a.Interactive {
-		fmt.Fprintln(a.Stdout)
-	}
-	s.Host, err = a.answer("host", hostFlag, "Server IP address or hostname", "", checkHost)
+	fmt.Fprintln(a.Stdout)
+	s.Host, err = a.answer("Server IP address or hostname", "", checkHost)
 	if err != nil {
 		return s, err
 	}
-	s.User, err = a.answer("user", userFlag, "User to log in as", "root", checkUser)
+	s.User, err = a.answer("User to log in as", "root", checkUser)
 	if err != nil {
 		return s, err
 	}
-	s.Key, err = a.answer("key", keyFlag, "SSH private key", defaultKey(home), func(p string) (string, error) {
+	s.Key, err = a.answer("SSH private key", defaultKey(home), func(p string) (string, error) {
 		return checkKey(home, p)
 	})
 	if err != nil {
@@ -189,7 +165,7 @@ func (a *App) setupLogin(hostFlag, userFlag, keyFlag, nameFlag string) (config.S
 		defName = strings.ToLower(s.Host)
 	}
 	for {
-		s.Name, err = a.answer("name", nameFlag, "Name for this server", defName, func(n string) (string, error) {
+		s.Name, err = a.answer("Name for this server", defName, func(n string) (string, error) {
 			return n, config.CheckName(n)
 		})
 		if err != nil {
@@ -202,27 +178,15 @@ func (a *App) setupLogin(hostFlag, userFlag, keyFlag, nameFlag string) (config.S
 		if err != nil {
 			return s, err
 		}
-		if !a.Interactive {
-			return s, fmt.Errorf("there's already a server named %s, which logs in to %s; pick another --name",
-				s.Name, saved.Destination())
-		}
-		replace, err := a.confirm(fmt.Sprintf("There's already a server named %s, which logs in to %s with %s. Replace it?",
-			s.Name, saved.Destination(), tildePath(home, saved.Key)), false)
-		if err != nil {
-			return s, err
-		}
-		if replace {
+		if a.confirm(fmt.Sprintf("There's already a server named %s, which logs in to %s with %s. Replace it?",
+			s.Name, saved.Destination(), tildePath(home, saved.Key)), false) {
 			break
 		}
-		nameFlag, defName = "", ""
+		defName = ""
 	}
 
-	opts, err := a.sshOptions(s)
-	if err != nil {
-		return s, err
-	}
 	fmt.Fprintf(a.Stdout, "\nChecking that ssh can log in to %s:\n", s.Destination())
-	if err := a.run("ssh", append(opts, "--", s.Destination(), "true")...); err != nil {
+	if err := a.run("ssh", sshArgs(s, "true")...); err != nil {
 		if errors.Is(err, exec.ErrNotFound) {
 			return s, errors.New("can't find ssh; install OpenSSH and run rembox setup again")
 		}
@@ -236,23 +200,9 @@ func (a *App) setupLogin(hostFlag, userFlag, keyFlag, nameFlag string) (config.S
 	return s, nil
 }
 
-// answer returns the flag's value if it was given, or else asks question
-// until check accepts the answer. check returns the answer as rembox keeps it.
-// Without a terminal, it uses def, or fails if there isn't one.
-func (a *App) answer(flagName, flagValue, question, def string, check func(string) (string, error)) (string, error) {
-	if flagValue != "" {
-		v, err := check(flagValue)
-		if err != nil {
-			return "", fmt.Errorf("--%s: %w", flagName, err)
-		}
-		return v, nil
-	}
-	if !a.Interactive {
-		if def == "" {
-			return "", fmt.Errorf("can't ask for the %s without a terminal; pass --%s", flagName, flagName)
-		}
-		return check(def)
-	}
+// answer asks question until check accepts the answer. check returns the
+// answer as rembox keeps it.
+func (a *App) answer(question, def string, check func(string) (string, error)) (string, error) {
 	for {
 		v, err := a.ask(question, def)
 		if err != nil {

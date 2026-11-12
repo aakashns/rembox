@@ -39,15 +39,6 @@ func serverPath(dir, name string) string {
 	return filepath.Join(dir, "servers", name+".json")
 }
 
-// HasServer says whether a server called name is saved under dir.
-func HasServer(dir, name string) (bool, error) {
-	_, err := os.Stat(serverPath(dir, name))
-	if errors.Is(err, fs.ErrNotExist) {
-		return false, nil
-	}
-	return err == nil, err
-}
-
 // SaveServer saves s under dir, replacing any server with its name. The file
 // is readable only by you.
 func SaveServer(dir string, s Server) error {

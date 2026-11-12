@@ -10,7 +10,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/aakashns/rembox/cli/internal/release"
 	"github.com/aakashns/rembox/cli/internal/release/releasetest"
@@ -22,20 +21,19 @@ type testApp struct {
 	*App
 	stdout, stderr *bytes.Buffer
 	exe            string                    // fake installed binary
-	home           string                    // fake home folder, where backups go
+	home           string                    // fake home folder
 	configDir      string                    // fake ~/.config/rembox (not created)
 	commands       [][]string                // every command run, as name and args
 	sudoArgs       []string                  // the last sudo command's
 	sshArgs        []string                  // the last ssh command's
-	sshErr         error                     // what ssh returns
 	onSudo         func(args []string) error // replaces the fake sudo, which removes its last arg
 	srv            *releasetest.Server
 
-	// The fake server that Pipe's ssh commands reach.
+	// The fake server that ssh reaches.
+	sshErr   error                                                      // what ssh returns, but for scripts
 	probeOut string                                                     // what probe.sh prints; facts() by default
-	onPipe   func(script string, args []string, stdout io.Writer) error // replaces the fake server
-	scripts  []string                                                   // the scripts sent, by name
-	sleeps   int
+	onScript func(script string, args []string, stdout io.Writer) error // replaces the fake server's scripts
+	scripts  []string                                                   // the scripts run, by name
 }
 
 // facts is what probe.sh prints for a server rembox can set up, with
@@ -46,7 +44,6 @@ func facts(overrides ...string) string {
 		"arch": "arm64", "kernel": "7.0.0-10-generic", "hostname": "box", "virt": "kvm",
 		"cpus": "2", "memory_kb": "3905536", "swap_kb": "0", "disk_kb": "39634756", "disk_free_kb": "36870728",
 		"user": "root", "uid": "0", "sudo": "yes", "apt": "yes", "systemd": "yes", "reboot_required": "no",
-		"boot_id": "boot-1",
 	}
 	for _, o := range overrides {
 		k, v, _ := strings.Cut(o, "=")
@@ -59,10 +56,10 @@ func facts(overrides ...string) string {
 	return b.String()
 }
 
-// scriptName is the name of the rembox script body is, or "".
-func scriptName(body string) string {
+// scriptIn is the name of the rembox script in ssh's args, or "".
+func scriptIn(args []string) string {
 	for _, s := range []remote.Script{remote.Probe, remote.Update} {
-		if body == s.Body {
+		if slices.Contains(args, shellQuote(s.Body)) {
 			return s.Name
 		}
 	}
@@ -101,8 +98,7 @@ func newTestApp(t *testing.T, current string) *testApp {
 		GOARCH:     "amd64",
 		ConfigDir:  func() (string, error) { return ta.configDir, nil },
 		HomeDir:    func() (string, error) { return home, nil },
-		Now:        func() time.Time { return time.Date(2026, 11, 12, 14, 30, 0, 0, time.UTC) },
-		Command: func(name string, args ...string) error {
+		Command: func(stdout io.Writer, name string, args ...string) error {
 			ta.commands = append(ta.commands, append([]string{name}, args...))
 			switch name {
 			case "sudo":
@@ -113,45 +109,33 @@ func newTestApp(t *testing.T, current string) *testApp {
 				return os.Remove(args[len(args)-1]) // as if sudo rm had worked
 			case "ssh":
 				ta.sshArgs = args
-				return ta.sshErr
+				script := scriptIn(args)
+				if script == "" {
+					return ta.sshErr
+				}
+				ta.scripts = append(ta.scripts, script)
+				if ta.onScript != nil {
+					return ta.onScript(script, args, stdout)
+				}
+				if script == "probe.sh" {
+					fmt.Fprint(stdout, ta.probeOut)
+				} else {
+					fmt.Fprintln(stdout, "(what update.sh prints)")
+				}
+				return nil
 			}
 			return fmt.Errorf("the tests don't fake %s", name)
 		},
-		Pipe: func(stdin io.Reader, stdout, stderr io.Writer, name string, args ...string) error {
-			ta.commands = append(ta.commands, append([]string{name}, args...))
-			script := ""
-			if stdin != nil {
-				b, err := io.ReadAll(stdin)
-				if err != nil {
-					return err
-				}
-				script = scriptName(string(b))
-				if script == "" {
-					return fmt.Errorf("the tests don't fake sending %q", b)
-				}
-				ta.scripts = append(ta.scripts, script)
-			}
-			if name != "ssh" {
-				return fmt.Errorf("the tests don't fake %s", name)
-			}
-			if ta.onPipe != nil {
-				return ta.onPipe(script, args, stdout)
-			}
-			switch script {
-			case "probe.sh":
-				fmt.Fprint(stdout, ta.probeOut)
-			case "update.sh":
-				fmt.Fprintln(stdout, "(what update.sh prints)")
-			default:
-				return fmt.Errorf("the tests don't fake ssh %q", args)
-			}
-			return nil
-		},
-		Sleep: func(time.Duration) { ta.sleeps++ },
-		Euid:  1000,
+		Euid: 1000,
 	}
 	ta.probeOut = facts()
 	return ta
+}
+
+// typing sets what the user types: a line for each answer.
+func (ta *testApp) typing(lines ...string) {
+	ta.Stdin = strings.NewReader(strings.Join(lines, "\n") + "\n")
+	ta.in = nil
 }
 
 func (ta *testApp) installed(t *testing.T) string {
@@ -216,8 +200,7 @@ func TestUsageErrors(t *testing.T) {
 func TestUpgradeConfirmed(t *testing.T) {
 	ta := newTestApp(t, "0.1.0")
 	ta.srv.AddRelease("v0.2.0", "linux", "amd64", []byte("new binary"))
-	ta.Interactive = true
-	ta.Stdin = strings.NewReader("y\n")
+	ta.typing("y")
 
 	if code := ta.Run([]string{"upgrade"}); code != 0 {
 		t.Fatalf("exit %d: %s", code, ta.stderr)
@@ -237,7 +220,6 @@ func TestUpgradeDeclined(t *testing.T) {
 	for _, answer := range []string{"n\n", "\n", "", "maybe\n"} {
 		ta := newTestApp(t, "0.1.0")
 		ta.srv.AddRelease("v0.2.0", "linux", "amd64", []byte("new binary"))
-		ta.Interactive = true
 		ta.Stdin = strings.NewReader(answer)
 
 		if code := ta.Run([]string{"upgrade"}); code != 0 {
@@ -252,41 +234,10 @@ func TestUpgradeDeclined(t *testing.T) {
 	}
 }
 
-func TestUpgradeYesFlag(t *testing.T) {
-	for _, flag := range []string{"-y", "--yes"} {
-		ta := newTestApp(t, "0.1.0")
-		ta.srv.AddRelease("v0.2.0", "linux", "amd64", []byte("new binary"))
-
-		if code := ta.Run([]string{"upgrade", flag}); code != 0 {
-			t.Fatalf("%s: exit %d: %s", flag, code, ta.stderr)
-		}
-		if got := ta.installed(t); got != "new binary" {
-			t.Errorf("%s: installed binary = %q", flag, got)
-		}
-	}
-}
-
-func TestUpgradeNonInteractiveNeedsYes(t *testing.T) {
-	ta := newTestApp(t, "0.1.0")
-	ta.srv.AddRelease("v0.2.0", "linux", "amd64", []byte("new binary"))
-	ta.Stdin = strings.NewReader("y\n") // piped input isn't a confirmation
-
-	if code := ta.Run([]string{"upgrade"}); code != 1 {
-		t.Fatalf("exit %d, want 1", code)
-	}
-	if !strings.Contains(ta.stderr.String(), "--yes") {
-		t.Errorf("stderr doesn't mention --yes: %s", ta.stderr)
-	}
-	if got := ta.installed(t); got != "old binary" {
-		t.Error("binary was replaced")
-	}
-}
-
 func TestUpgradeUpToDate(t *testing.T) {
 	for _, current := range []string{"0.2.0", "0.3.0-rc.1"} {
 		ta := newTestApp(t, current)
 		ta.srv.AddRelease("v0.2.0", "linux", "amd64", []byte("new binary"))
-		ta.Interactive = true
 
 		if code := ta.Run([]string{"upgrade"}); code != 0 {
 			t.Fatalf("%s: exit %d: %s", current, code, ta.stderr)
@@ -301,7 +252,8 @@ func TestUpgradeDevBuild(t *testing.T) {
 	ta := newTestApp(t, "dev")
 	ta.srv.AddRelease("v0.2.0", "linux", "amd64", []byte("new binary"))
 
-	if code := ta.Run([]string{"upgrade", "--yes"}); code != 0 {
+	ta.typing("y")
+	if code := ta.Run([]string{"upgrade"}); code != 0 {
 		t.Fatalf("exit %d: %s", code, ta.stderr)
 	}
 	if !strings.Contains(ta.stdout.String(), "development build") {
@@ -317,7 +269,8 @@ func TestUpgradeTampered(t *testing.T) {
 	ta.srv.AddRelease("v0.2.0", "linux", "amd64", []byte("new binary"))
 	ta.srv.SetFile("v0.2.0", "rembox-linux-amd64", []byte("evil binary"))
 
-	if code := ta.Run([]string{"upgrade", "--yes"}); code != 1 {
+	ta.typing("y")
+	if code := ta.Run([]string{"upgrade"}); code != 1 {
 		t.Fatalf("exit %d, want 1", code)
 	}
 	if !strings.Contains(ta.stderr.String(), "checksum mismatch") {
@@ -330,7 +283,7 @@ func TestUpgradeTampered(t *testing.T) {
 
 func TestUpgradeNoReleases(t *testing.T) {
 	ta := newTestApp(t, "0.1.0")
-	if code := ta.Run([]string{"upgrade", "--yes"}); code != 1 {
+	if code := ta.Run([]string{"upgrade"}); code != 1 {
 		t.Fatalf("exit %d, want 1", code)
 	}
 	if !strings.Contains(ta.stderr.String(), "no releases") {
@@ -347,7 +300,8 @@ func TestUpgradeFollowsSymlink(t *testing.T) {
 	}
 	ta.Executable = func() (string, error) { return link, nil }
 
-	if code := ta.Run([]string{"upgrade", "--yes"}); code != 0 {
+	ta.typing("y")
+	if code := ta.Run([]string{"upgrade"}); code != 0 {
 		t.Fatalf("exit %d: %s", code, ta.stderr)
 	}
 	if got := ta.installed(t); got != "new binary" {
@@ -364,8 +318,7 @@ func TestUpgradeUnwritable(t *testing.T) {
 	}
 	ta := newTestApp(t, "0.1.0")
 	ta.srv.AddRelease("v0.2.0", "linux", "amd64", []byte("new binary"))
-	ta.Interactive = true
-	ta.Stdin = strings.NewReader("y\n")
+	ta.typing("y")
 	dir := filepath.Dir(ta.exe)
 	if err := os.Chmod(dir, 0o555); err != nil {
 		t.Fatal(err)

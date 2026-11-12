@@ -57,7 +57,7 @@
       <section aria-labelledby="commands">
         <h2 id="commands">Commands</h2>
         <dl class="commands">
-          <dt><code>rembox setup [--host HOST] [--user USER] [--key PATH] [--name NAME] [--yes]</code></dt>
+          <dt><code>rembox setup</code></dt>
           <dd>
             Gets a server ready for development, explaining each step as it goes:
             <ol>
@@ -79,9 +79,7 @@
               </li>
             </ol>
             Run it again any time: each step looks at the server as it is now and changes only what
-            needs changing. rembox keeps nothing about a server but how to log in to it. Flags answer
-            the questions up front, and <code>--yes</code> installs updates and restarts without
-            asking, e.g. in a script.
+            needs changing. rembox keeps nothing about a server but how to log in to it.
           </dd>
           <dt><code>rembox list</code></dt>
           <dd>Lists the servers you’ve added, with the user, host and key rembox logs in with.</dd>
@@ -98,16 +96,14 @@
           <dd>Lists the commands, or explains one of them.</dd>
           <dt><code>rembox version</code></dt>
           <dd>Prints the version, and the commit it was built from.</dd>
-          <dt><code>rembox upgrade [--yes]</code></dt>
+          <dt><code>rembox upgrade</code></dt>
           <dd>
             Replaces rembox with the latest release, after showing both versions and asking first.
-            Pass <code>--yes</code> to skip the question, e.g. in a script.
           </dd>
-          <dt><code>rembox implode [--yes] [--backup | --no-backup]</code></dt>
+          <dt><code>rembox implode</code></dt>
           <dd>
             Removes rembox and its files in <code>~/.config/rembox</code> from this machine, after
-            listing them and asking first. Offers to back the files up to your home folder before
-            deleting them. Servers set up with rembox aren’t changed.
+            listing them and asking first. Servers set up with rembox aren’t changed.
           </dd>
         </dl>
       </section>
@@ -117,8 +113,7 @@
         can see exactly what it does and run it yourself. The scripts it runs on servers print each
         of their commands too, and you can read them in
         <a href="https://github.com/aakashns/rembox/tree/main/cli/internal/remote">the repo</a>.
-        Before a sensitive or destructive command, like a <code>sudo rm</code>, it asks first
-        (unless you pass <code>--yes</code>).
+        Before a sensitive or destructive command, like a <code>sudo rm</code>, it asks first.
       </p>
 
       <section aria-labelledby="installing">

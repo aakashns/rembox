@@ -12,23 +12,16 @@ import (
 	"github.com/aakashns/rembox/cli/internal/version"
 )
 
-const upgradeHelp = `Usage: rembox upgrade [--yes]
+const upgradeHelp = `Usage: rembox upgrade
 
 Upgrade rembox to the latest release. Shows the current and latest versions
 and asks before changing anything. The download is checked against the
 release's SHA256SUMS before it replaces this binary. If the binary is in a
 folder you can't write to (like /usr/local/bin), run it with sudo.
-
-Flags:
-  -y, --yes   Upgrade without asking
 `
 
 func runUpgrade(a *App, args []string) error {
-	fs := flag.NewFlagSet("upgrade", flag.ContinueOnError)
-	var yes bool
-	fs.BoolVar(&yes, "y", false, "")
-	fs.BoolVar(&yes, "yes", false, "")
-	if err := parseFlags(fs, args); err != nil {
+	if err := parseFlags(flag.NewFlagSet("upgrade", flag.ContinueOnError), args); err != nil {
 		return err
 	}
 
@@ -67,15 +60,9 @@ func runUpgrade(a *App, args []string) error {
 		return fmt.Errorf("can't replace %s; run it as a user who can, e.g. sudo rembox upgrade", exe)
 	}
 
-	if !yes {
-		ok, err := a.confirm(fmt.Sprintf("Replace %s with rembox %s?", exe, latest), false)
-		if err != nil {
-			return err
-		}
-		if !ok {
-			fmt.Fprintln(a.Stdout, "Upgrade cancelled.")
-			return nil
-		}
+	if !a.confirm(fmt.Sprintf("Replace %s with rembox %s?", exe, latest), false) {
+		fmt.Fprintln(a.Stdout, "Upgrade cancelled.")
+		return nil
 	}
 
 	asset := release.AssetName(a.GOOS, a.GOARCH)

@@ -33,11 +33,7 @@ func runInfo(a *App, args []string) error {
 	if err != nil {
 		return err
 	}
-	opts, err := a.sshOptions(s)
-	if err != nil {
-		return err
-	}
-	m, err := a.probe(s, opts)
+	m, err := a.probe(s)
 	if err != nil {
 		return err
 	}

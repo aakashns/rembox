@@ -48,7 +48,6 @@ main() {
   fact apt "$(yes_if command -v apt-get)"
   fact systemd "$(yes_if test -d /run/systemd/system)"
   fact reboot_required "$(yes_if test -e /var/run/reboot-required)"
-  fact boot_id "$(cat /proc/sys/kernel/random/boot_id)"
 }
 
 main "$@" </dev/null
