@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/aakashns/rembox/cli/internal/config"
@@ -18,29 +19,47 @@ import (
 
 const setupHelp = `Usage: rembox setup [NAME]
 
-Get a server ready for development. rembox asks which server, the user to log
-in as (root, by default), the SSH key to log in with, and a name for the
-server (its hostname, by default), and saves it, so 'rembox list' and 'rembox
-ssh' know it. Give the NAME of a server you've added to set it up again: its
-address, user and key are the defaults, and any you change replace them.
+Get a server ready for development, securely. rembox asks which server, the
+port and user to log in with (22 and root, by default), the SSH key to log in
+with, and a name for the server (its hostname, by default), and saves it, so
+'rembox list' and 'rembox ssh' know it. Then it asks for your user on the
+server (your username on this machine, by default) and the port to move ssh to
+(a random one, by default).
 
-Then rembox logs in with ssh and runs setup.sh on the server, which shows
-each command it runs as it:
+rembox keeps a Host block for each server in ~/.config/rembox/ssh_config. It
+asks to include that at the top of ~/.ssh/config, so 'ssh NAME', and ssh to
+the server's address, log in on the new port as your user, as rembox does.
+
+Then rembox runs setup.sh on the server, as root, in two ssh sessions. First,
+as the user you log in as, it:
 
   1. Checks that rembox can set up the server: so far, Ubuntu or Debian.
   2. Installs the latest version of every package with apt.
-  3. Asks to restart the server, if an update needs it.
+  3. Adds your user, if it isn't there yet, with sudo and the SSH keys of the
+     user you log in as, and asks you for a password for it, if it has none.
+     sudo asks for it, so programs running as your user, like coding agents,
+     can't run commands as root without you.
+  4. Sets sshd to listen on the new port too, and let in only keys.
+
+rembox then saves the server with your user and the new port, and logs in
+with them, which shows they work. Then setup.sh:
+
+  5. Sets sshd to listen only on the new port, with no root login.
+  6. Sets up fail2ban to ban IP addresses that keep failing to log in.
+  7. Asks to restart the server, if an update needs it.
+
+ssh asks you to check the server's host key again the first time it logs in
+on the new port. If it can't log in there, open the port in your cloud
+provider's firewall, if it has one, then run 'rembox setup NAME' again.
+
+Give the NAME of a server you've added to set it up again: its address, port,
+user and key are the defaults, and any you change replace them. Run it any
+time, as often as you like: setup.sh looks at the server as it is now and
+changes only what needs changing. rembox doesn't keep anything about the
+server but how to log in to it.
 
 Unless rembox logs in as root, it runs setup.sh with sudo, which may ask for
-the user's password on the server.
-
-Run it again any time, as often as you like: setup.sh looks at the server as
-it is now and changes only what needs changing. rembox doesn't keep anything
-about the server but how to log in to it.
-
-The first time you connect to a server, ssh asks you to check its host key,
-then adds it to ~/.ssh/known_hosts; if the key later changes, ssh refuses to
-connect.
+the user's password on the server: always, once it logs in as your user.
 `
 
 // defaultKeys are the private keys setup offers, in order of preference.
@@ -68,6 +87,58 @@ func runSetup(a *App, args []string) error {
 	if err != nil {
 		return err
 	}
+	user, err := a.answer("Your user on the server", userDefault(a.Username), checkYourUser)
+	if err != nil {
+		return err
+	}
+	portDefault := s.Port
+	if portDefault == config.DefaultPort {
+		portDefault = a.NewPort()
+	}
+	port, err := a.answer("Port to move ssh to", strconv.Itoa(portDefault), checkNewPort)
+	if err != nil {
+		return err
+	}
+	include, err := a.askInclude(s.Name)
+	if err != nil {
+		return err
+	}
+	if err := a.saveServer(s); err != nil {
+		return err
+	}
+	if include {
+		if err := a.include(); err != nil {
+			return err
+		}
+	}
+
+	// Each session does all it can, so ssh and sudo ask for a password at
+	// most once each.
+	err = a.runScript(s, asRoot(s, "bash", "-c"), remote.Setup, a.Stdout, "start", user, port, strconv.Itoa(s.Port))
+	if cantLogIn(err) {
+		return fmt.Errorf("%w. To change the address, port, user or key: rembox setup %s", err, s.Name)
+	} else if err != nil {
+		return err
+	}
+
+	s.User, s.Port = user, mustAtoi(port)
+	if err := a.saveServer(s); err != nil {
+		return err
+	}
+	err = a.runScript(s, asRoot(s, "bash", "-c"), remote.Setup, a.Stdout, "finish", port)
+	if cantLogIn(err) {
+		return fmt.Errorf("%w. If %s's cloud provider has a firewall, open port %s/tcp in it, then run rembox setup %s again",
+			err, s.Name, port, s.Name)
+	} else if err != nil {
+		return err
+	}
+	fmt.Fprintf(a.Stdout, "\n\n%s %s\n", a.paint(green, "==>"),
+		a.paint(bold, fmt.Sprintf("%s is set up. To log in: rembox ssh %s", s.Name, s.Name)))
+	return nil
+}
+
+// saveServer saves s, and says so.
+func (a *App) saveServer(s config.Server) error {
 	dir, err := a.ConfigDir()
 	if err != nil {
 		return err
@@ -75,20 +146,50 @@ func runSetup(a *App, args []string) error {
 	if err := config.SaveServer(dir, s); err != nil {
 		return fmt.Errorf("saving %s: %w", s.Name, err)
 	}
-	a.done(fmt.Sprintf("Saved %s (%s).", s.Name, s.Destination()))
+	a.done(fmt.Sprintf("Saved %s (%s, port %d).", s.Name, s.Destination(), s.Port))
+	return nil
+}
 
-	// One ssh session does everything, so ssh and sudo each ask for a
-	// password at most once.
-	err = a.runScript(s, asRoot(s, "bash", "-c"), remote.Setup, a.Stdout)
-	var ee *exec.ExitError
-	if errors.As(err, &ee) && ee.ExitCode() == 255 {
-		return fmt.Errorf("%w. To change the address, user or key: rembox setup %s", err, s.Name)
-	} else if err != nil {
+// askInclude asks to include rembox's ssh config in ~/.ssh/config, unless it
+// is already. It says whether to add it.
+func (a *App) askInclude(name string) (bool, error) {
+	home, dir, err := a.dirs()
+	if err != nil {
+		return false, err
+	}
+	if ok, err := hasInclude(home, dir); ok || err != nil {
+		return false, err
+	}
+	return a.confirm(fmt.Sprintf("Add '%s' to the top of ~/.ssh/config, so ssh %s logs in as rembox does?",
+		includeLine(home, dir), name), false), nil
+}
+
+// include adds rembox's ssh config to ~/.ssh/config.
+func (a *App) include() error {
+	home, dir, err := a.dirs()
+	if err != nil {
 		return err
 	}
-	fmt.Fprintf(a.Stdout, "\n\n%s %s\n", a.paint(green, "==>"),
-		a.paint(bold, fmt.Sprintf("%s is set up. To log in: rembox ssh %s", s.Name, s.Name)))
+	if err := addInclude(home, dir); err != nil {
+		return err
+	}
+	a.done(fmt.Sprintf("Added '%s' to ~/.ssh/config.", includeLine(home, dir)))
 	return nil
+}
+
+// dirs are your home folder and rembox's config folder.
+func (a *App) dirs() (home, dir string, err error) {
+	if home, err = a.HomeDir(); err != nil {
+		return "", "", fmt.Errorf("can't find your home folder: %w", err)
+	}
+	dir, err = a.ConfigDir()
+	return home, dir, err
+}
+
+// cantLogIn says whether err is from ssh failing to log in.
+func cantLogIn(err error) bool {
+	var ee *exec.ExitError
+	return errors.As(err, &ee) && ee.ExitCode() == 255
 }
 
 // askServer asks which server to set up. saved is the server to set up again,
@@ -104,7 +205,7 @@ func (a *App) askServer(saved *config.Server) (config.Server, error) {
 		return s, fmt.Errorf("can't find your home folder: %w", err)
 	}
 
-	def := config.Server{User: "root", Key: defaultKey(home)}
+	def := config.Server{Port: config.DefaultPort, User: "root", Key: defaultKey(home)}
 	if saved != nil {
 		def = *saved
 		def.Key = tildePath(home, saved.Key)
@@ -113,6 +214,11 @@ func (a *App) askServer(saved *config.Server) (config.Server, error) {
 	if err != nil {
 		return s, err
 	}
+	port, err := a.answer("SSH port", strconv.Itoa(def.Port), checkPort)
+	if err != nil {
+		return s, err
+	}
+	s.Port = mustAtoi(port)
 	s.User, err = a.answer("User to log in as", def.User, checkUser)
 	if err != nil {
 		return s, err
@@ -179,6 +285,8 @@ func (a *App) answer(question, def string, check func(string) (string, error)) (
 var (
 	hostPattern = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]*$`)
 	userPattern = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]*$`)
+	// Your user, as Debian and Ubuntu's useradd takes it.
+	yourUserPattern = regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,31}$`)
 )
 
 // checkHost checks an IP address or hostname, and returns it without
@@ -190,6 +298,8 @@ func checkHost(v string) (string, error) {
 		return "", errors.New("enter the server's IP address or hostname")
 	case strings.Contains(host, "@"):
 		return "", errors.New("enter just the IP address or hostname; rembox asks for the user next")
+	case hasPort(v):
+		return "", errors.New("enter just the IP address or hostname; rembox asks for the port next")
 	case net.ParseIP(host) == nil && !hostPattern.MatchString(host):
 		return "", fmt.Errorf("%q isn't an IP address or hostname", host)
 	}
@@ -202,6 +312,61 @@ func checkUser(user string) (string, error) {
 		return "", fmt.Errorf("%q isn't a user name", user)
 	}
 	return user, nil
+}
+
+// checkYourUser checks the name of your user on the server.
+func checkYourUser(user string) (string, error) {
+	switch {
+	case user == "":
+		return "", errors.New("enter a name for your user on the server")
+	case user == "root":
+		return "", errors.New("pick a user other than root; rembox turns off logging in as root")
+	case !yourUserPattern.MatchString(user):
+		return "", fmt.Errorf("%q can't be a user on the server; use lowercase letters, digits, '-' and '_', starting with a letter", user)
+	}
+	return user, nil
+}
+
+// userDefault is your username on this machine, if it can be a user on the
+// server, or "".
+func userDefault(name string) string {
+	if _, err := checkYourUser(name); err != nil {
+		return ""
+	}
+	return name
+}
+
+// checkPort checks a port number.
+func checkPort(v string) (string, error) {
+	port, err := strconv.Atoi(v)
+	if err != nil || port < 1 || port > 65535 {
+		return "", fmt.Errorf("%q isn't a port; enter a number from 1 to 65535", v)
+	}
+	return strconv.Itoa(port), nil
+}
+
+// checkNewPort checks the port to move ssh to.
+func checkNewPort(v string) (string, error) {
+	v, err := checkPort(v)
+	if err == nil && v == strconv.Itoa(config.DefaultPort) {
+		err = fmt.Errorf("pick a port other than %d, which bots try to log in on all day", config.DefaultPort)
+	}
+	return v, err
+}
+
+// mustAtoi is the number in s, which a check has accepted.
+func mustAtoi(s string) int {
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		panic(err)
+	}
+	return n
+}
+
+// hasPort says whether v is a host and port, like box:2222 or [::1]:2222.
+func hasPort(v string) bool {
+	host, port, err := net.SplitHostPort(v)
+	return err == nil && host != "" && port != ""
 }
 
 // checkKey checks that path (which may start with ~/) is a private key file,
@@ -241,9 +406,10 @@ func defaultKey(home string) string {
 	return ""
 }
 
-// keyArgs are the ssh arguments to log in to s with its key.
-func keyArgs(s config.Server) []string {
+// loginArgs are the ssh arguments to log in to s on its port, with its key.
+func loginArgs(s config.Server) []string {
 	return []string{
+		"-p", strconv.Itoa(s.Port),
 		"-i", s.Key,
 		"-o", "IdentitiesOnly=yes", // just this key, not every key in the agent
 	}
