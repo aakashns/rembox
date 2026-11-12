@@ -1,0 +1,23 @@
+# Serves rembox.aakashns.com from public/. Set the root to where this repo's site/public is on the server.
+rembox.aakashns.com {
+	root * /srv/rembox/site/public
+	encode zstd gzip
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+	# So `curl ... | sh` and browsers both get the script as text, and fixes reach users quickly.
+	header /install.sh {
+		Content-Type "text/plain; charset=utf-8"
+		Cache-Control "public, max-age=300"
+	}
+
+	file_server
+
+	# Unknown paths get 404.html, still with a 404 status.
+	handle_errors 404 {
+		rewrite * /404.html
+		file_server
+	}
+}

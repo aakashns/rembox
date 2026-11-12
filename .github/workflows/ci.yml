@@ -1,0 +1,58 @@
+# Checks the CLI (on Linux and macOS) and install.sh, and that a pull request bumps cli/VERSION.
+# Runs on pull requests, and on pushes to main as part of release.yml.
+name: CI
+
+on:
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # Every pull request raises cli/VERSION, and merging it releases that version (release.yml).
+  version:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check cli/VERSION is higher than the base branch's
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch --depth=1 origin "$BASE"
+          base=$(git show "$BASE:cli/VERSION" 2>/dev/null || echo 0.0.0)
+          head=$(cat cli/VERSION)
+          [[ "$head" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
+            { echo "::error file=cli/VERSION::'$head' isn't a version like 1.2.3"; exit 1; }
+          highest=$(printf '%s\n%s\n' "$base" "$head" | sort -V | tail -1)
+          [[ "$head" != "$base" && "$highest" == "$head" ]] ||
+            { echo "::error file=cli/VERSION::Bump cli/VERSION above $base; merging releases it"; exit 1; }
+          echo "Merging releases $base -> $head"
+
+  cli:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        working-directory: cli
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: cli/go.mod
+          cache-dependency-path: cli/go.mod
+      # Includes install.sh's tests, which install and upgrade against a pretend release.
+      - run: make test
+      # shellcheck comes with GitHub's Ubuntu runners.
+      - if: runner.os == 'Linux'
+        run: make lint
+      - run: make dist
+

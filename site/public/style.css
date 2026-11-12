@@ -1,0 +1,251 @@
+/* rembox.aakashns.com: one narrow column, dark like a terminal. Two heading sizes, and two for body
+   text: 1rem, and 0.875rem for code and the footer. No web fonts. */
+
+:root {
+  --bg: #161616;
+  --text: #e6e6e6;
+  --muted: #a1a1a1;
+  --faint: #2e2e2e;
+  --surface: #1e1e1e;
+  --link: #5fb3f0;
+  --accent: #7ee2a8;
+  --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --small: 0.875rem;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--bg);
+  color: var(--text);
+  font-family:
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  font-size: 18px;
+  line-height: 1.65;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: 2rem 1.25rem 3rem;
+}
+
+a {
+  color: inherit;
+  text-decoration-color: var(--muted);
+  text-underline-offset: 0.2em;
+}
+a:hover {
+  text-decoration-color: var(--text);
+}
+:focus-visible {
+  outline: 2px solid var(--link);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+h1 {
+  margin: 0 0 0.3em;
+  font-size: 2rem;
+  font-weight: 650;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+h2 {
+  margin: 0 0 0.5em;
+  font-size: 1.25rem;
+  font-weight: 650;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+p,
+ul,
+dl,
+pre,
+figure {
+  margin: 0 0 1.1em;
+}
+strong {
+  font-weight: 600;
+}
+code,
+pre {
+  font-family: var(--mono);
+  font-size: var(--small);
+}
+/* Code in a sentence. */
+p code,
+dd code {
+  padding: 0.1em 0.3em;
+  white-space: nowrap;
+  background: var(--surface);
+  border-radius: 3px;
+}
+
+/* Header and footer */
+
+header.site {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5em 1.5em;
+  margin-bottom: 3.5rem;
+}
+header.site .name {
+  text-decoration: none;
+}
+.wordmark {
+  font-family: var(--mono);
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.wordmark span {
+  margin-right: 0.35em;
+  color: var(--accent);
+}
+header.site nav {
+  display: flex;
+  gap: 1.25em;
+}
+header.site nav a {
+  color: var(--muted);
+  text-decoration: none;
+}
+header.site nav a:hover {
+  color: var(--text);
+}
+
+footer.site {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.25em 1.5em;
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--faint);
+  color: var(--muted);
+  font-size: var(--small);
+}
+
+/* Landing page */
+
+/* Line breaks only narrow screens take. */
+@media (min-width: 30.0625rem) {
+  br.mobile {
+    display: none;
+  }
+}
+
+.lede {
+  color: var(--muted);
+}
+.lede {
+  margin-bottom: 2.5rem;
+}
+
+.command {
+  display: flex;
+  align-items: center;
+  gap: 1em;
+  margin-bottom: 0.8em;
+  padding: 0.7em 0.7em 0.7em 1em;
+  background: var(--surface);
+  border: 1px solid var(--faint);
+  border-radius: 6px;
+}
+.command pre {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow-x: auto;
+}
+.command button {
+  flex: none;
+  padding: 0.2em 0.7em;
+  font: inherit;
+  font-size: var(--small);
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--faint);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.command button:hover {
+  color: var(--text);
+  border-color: var(--muted);
+}
+
+/* Other commands: a plain block, one command per line. */
+pre.block {
+  padding: 0.7em 1em;
+  overflow-x: auto;
+  background: var(--surface);
+  border: 1px solid var(--faint);
+  border-radius: 6px;
+}
+
+.callout {
+  margin: 2.5rem 0 3rem;
+  padding: 0.8em 1em;
+  border-left: 3px solid var(--accent);
+  background: var(--surface);
+  border-radius: 0 6px 6px 0;
+}
+
+section + section {
+  margin-top: 3rem;
+}
+
+dl.commands dt {
+  margin-top: 1em;
+}
+dl.commands dt:first-child {
+  margin-top: 0;
+}
+dl.commands dd {
+  margin: 0.2em 0 0;
+  color: var(--muted);
+}
+
+.sr-only,
+.skip-link:not(:focus) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+.skip-link:focus {
+  display: block;
+  padding: 0.5rem;
+}
+[hidden] {
+  display: none !important;
+}
+
+@media (max-width: 30rem) {
+  html {
+    font-size: 16px;
+  }
+  header.site {
+    column-gap: 1em;
+    margin-bottom: 2.5rem;
+  }
+  header.site nav {
+    gap: 1em;
+  }
+}
