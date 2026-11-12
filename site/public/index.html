@@ -86,7 +86,8 @@
 
       <p>
         rembox prints every command it runs, like the <code>ssh</code> that checks a server, so you
-        can see exactly what it does and run it yourself.
+        can see exactly what it does and run it yourself. Before a sensitive or destructive command,
+        like a <code>sudo rm</code>, it asks first (unless you pass <code>--yes</code>).
       </p>
 
       <section aria-labelledby="installing">

@@ -76,12 +76,36 @@ func atTerminal(name string, args ...string) error {
 // rembox shows every command it runs, so you can see what it does to your
 // machines.
 func (a *App) run(name string, args ...string) error {
+	a.showCommand(name, args)
+	return a.Command(name, args...)
+}
+
+// errDeclined means the user chose not to run a command.
+var errDeclined = errors.New("cancelled")
+
+// runConfirmed is run for sensitive or destructive commands: it shows the
+// command, then asks before running it. If yes (from --yes), it doesn't ask.
+// It returns errDeclined if the answer is no.
+func (a *App) runConfirmed(yes bool, name string, args ...string) error {
+	a.showCommand(name, args)
+	if !yes {
+		ok, err := a.confirm("Run this command?", false)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return errDeclined
+		}
+	}
+	return a.Command(name, args...)
+}
+
+func (a *App) showCommand(name string, args []string) {
 	words := []string{"$", shellQuote(name)}
 	for _, arg := range args {
 		words = append(words, shellQuote(arg))
 	}
 	fmt.Fprintln(a.Stdout, strings.Join(words, " "))
-	return a.Command(name, args...)
 }
 
 var shellSafe = regexp.MustCompile(`^[A-Za-z0-9_@%+=:,./-]+$`)
