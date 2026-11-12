@@ -49,37 +49,17 @@
       <p id="copy-status" class="sr-only" role="status"></p>
 
       <p class="callout">
-        <strong>Early days.</strong> So far <code>rembox setup</code> logs in to a server, checks it,
-        and installs its updates. The rest of setting up a server comes next, and this page will
-        document each step as it lands.
+        <strong>Early days.</strong> So far <code>rembox setup</code> checks a server and installs
+        its updates. More steps are coming.
       </p>
 
       <section aria-labelledby="commands">
         <h2 id="commands">Commands</h2>
         <dl class="commands">
-          <dt><code>rembox setup</code></dt>
+          <dt><code>rembox setup [NAME]</code></dt>
           <dd>
-            Gets a server ready for development, explaining each step as it goes:
-            <ol>
-              <li>
-                <strong>Log in.</strong> Asks for the server’s IP address or hostname, the user to
-                log in as (root, by default), the SSH key to log in with, and a name for it (its
-                hostname, by default), then checks that ssh can log in and saves it.
-              </li>
-              <li>
-                <strong>Check.</strong> Runs a short script on the server that reports its system,
-                processor, memory and disk, and checks that rembox can set it up: so far, Ubuntu or
-                Debian.
-              </li>
-              <li>
-                <strong>Update.</strong> Installs the latest version of every package with apt, then
-                restarts the server if an update needs it. Asks before each. Unless it logs in as root,
-                rembox does these with <code>sudo</code>, which may ask for the user’s password on the
-                server.
-              </li>
-            </ol>
-            Run it again any time: each step looks at the server as it is now and changes only what
-            needs changing. rembox keeps nothing about a server but how to log in to it.
+            Adds a server (or, with NAME, changes one), then checks it, installs updates, and
+            restarts it if needed.
           </dd>
           <dt><code>rembox list</code></dt>
           <dd>Lists the servers you’ve added, with the user, host and key rembox logs in with.</dd>
@@ -87,33 +67,21 @@
           <dd>
             Logs in to the server called NAME, as its user and with its key, or runs a command on it.
           </dd>
-          <dt><code>rembox info NAME</code></dt>
-          <dd>
-            Shows what kind of machine the server called NAME is (its system, processor, memory and
-            disk) and whether rembox can set it up, by running the same script as setup.
-          </dd>
           <dt><code>rembox help [command]</code></dt>
           <dd>Lists the commands, or explains one of them.</dd>
           <dt><code>rembox version</code></dt>
           <dd>Prints the version, and the commit it was built from.</dd>
           <dt><code>rembox upgrade</code></dt>
-          <dd>
-            Replaces rembox with the latest release, after showing both versions and asking first.
-          </dd>
+          <dd>Upgrades rembox to the latest release.</dd>
           <dt><code>rembox implode</code></dt>
-          <dd>
-            Removes rembox and its files in <code>~/.config/rembox</code> from this machine, after
-            listing them and asking first. Servers set up with rembox aren’t changed.
-          </dd>
+          <dd>Removes rembox and <code>~/.config/rembox</code> from this machine.</dd>
         </dl>
       </section>
 
       <p>
-        rembox prints every command it runs, like the <code>ssh</code> that checks a server, so you
-        can see exactly what it does and run it yourself. The scripts it runs on servers print each
-        of their commands too, and you can read them in
-        <a href="https://github.com/aakashns/rembox/tree/main/cli/internal/remote">the repo</a>.
-        Before a sensitive or destructive command, like a <code>sudo rm</code>, it asks first.
+        rembox prints every command it runs, including those in
+        <a href="https://github.com/aakashns/rembox/tree/main/cli/internal/remote">its server scripts</a>,
+        and asks before destructive ones.
       </p>
 
       <section aria-labelledby="installing">
@@ -139,10 +107,8 @@
       <section aria-labelledby="upgrading">
         <h2 id="upgrading">Upgrading and uninstalling</h2>
         <p>
-          <code>rembox upgrade</code> installs the latest release in place of the one you ran. If
-          it’s in a folder only root can write to, as <code>/usr/local/bin</code> often is, run it
-          with sudo. <code>rembox implode</code> uninstalls rembox, and asks for sudo itself if it
-          needs it:
+          Run <code>rembox upgrade</code> with sudo if rembox is in a folder only root can write to,
+          like <code>/usr/local/bin</code>.
         </p>
         <pre class="block"><code>sudo rembox upgrade
 rembox implode</code></pre>

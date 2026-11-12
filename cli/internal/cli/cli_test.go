@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -31,37 +30,14 @@ type testApp struct {
 
 	// The fake server that ssh reaches.
 	sshErr   error                                                      // what ssh returns, but for scripts
-	probeOut string                                                     // what probe.sh prints; facts() by default
 	onScript func(script string, args []string, stdout io.Writer) error // replaces the fake server's scripts
 	scripts  []string                                                   // the scripts run, by name
 }
 
-// facts is what probe.sh prints for a server rembox can set up, with
-// overrides like "uid=1000".
-func facts(overrides ...string) string {
-	f := map[string]string{
-		"os_id": "ubuntu", "os_version": "26.04", "os_name": "Ubuntu 26.04.1 LTS",
-		"arch": "arm64", "kernel": "7.0.0-10-generic", "hostname": "box", "virt": "kvm",
-		"cpus": "2", "memory_kb": "3905536", "swap_kb": "0", "disk_kb": "39634756", "disk_free_kb": "36870728",
-		"user": "root", "uid": "0", "sudo": "yes", "apt": "yes", "systemd": "yes", "reboot_required": "no",
-	}
-	for _, o := range overrides {
-		k, v, _ := strings.Cut(o, "=")
-		f[k] = v
-	}
-	var b strings.Builder
-	for _, k := range slices.Sorted(maps.Keys(f)) {
-		fmt.Fprintf(&b, "fact %s=%s\n", k, f[k])
-	}
-	return b.String()
-}
-
 // scriptIn is the name of the rembox script in ssh's args, or "".
 func scriptIn(args []string) string {
-	for _, s := range []remote.Script{remote.Probe, remote.Update} {
-		if slices.Contains(args, shellQuote(s.Body)) {
-			return s.Name
-		}
+	if slices.Contains(args, shellQuote(remote.Setup.Body)) {
+		return remote.Setup.Name
 	}
 	return ""
 }
@@ -117,18 +93,13 @@ func newTestApp(t *testing.T, current string) *testApp {
 				if ta.onScript != nil {
 					return ta.onScript(script, args, stdout)
 				}
-				if script == "probe.sh" {
-					fmt.Fprint(stdout, ta.probeOut)
-				} else {
-					fmt.Fprintln(stdout, "(what update.sh prints)")
-				}
+				fmt.Fprintln(stdout, "(what setup.sh prints)")
 				return nil
 			}
 			return fmt.Errorf("the tests don't fake %s", name)
 		},
 		Euid: 1000,
 	}
-	ta.probeOut = facts()
 	return ta
 }
 
@@ -153,7 +124,7 @@ func TestHelp(t *testing.T) {
 		if code := ta.Run(args); code != 0 {
 			t.Errorf("rembox %v: exit %d", args, code)
 		}
-		for _, want := range []string{"Usage:", "setup", "list", "ssh", "info", "help", "version", "upgrade", "implode"} {
+		for _, want := range []string{"Usage:", "setup", "list", "ssh", "help", "version", "upgrade", "implode"} {
 			if !strings.Contains(ta.stdout.String(), want) {
 				t.Errorf("rembox %v: output missing %q:\n%s", args, want, ta.stdout)
 			}
