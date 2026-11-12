@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -31,11 +32,14 @@ type App struct {
 	GOOS       string
 	GOARCH     string
 
-	ConfigDir func() (string, error)     // where rembox keeps its files
-	HomeDir   func() (string, error)     // where implode puts backups
-	Now       func() time.Time           // for backups' names
-	Sudo      func(args ...string) error // runs a command with sudo, at the terminal
-	Euid      int                        // 0 when run as root
+	ConfigDir func() (string, error) // where rembox keeps its files
+	HomeDir   func() (string, error) // for ~/.ssh, and where implode puts backups
+	Now       func() time.Time       // for backups' names
+
+	// Command runs a program at the terminal. Run commands with App.run,
+	// which shows them first.
+	Command func(name string, args ...string) error
+	Euid    int // 0 when run as root
 
 	in *bufio.Reader // Stdin, shared by every question
 }
@@ -54,16 +58,64 @@ func Main() int {
 		ConfigDir:   config.Dir,
 		HomeDir:     os.UserHomeDir,
 		Now:         time.Now,
-		Sudo:        sudo,
+		Command:     atTerminal,
 		Euid:        os.Geteuid(),
 	}
 	return app.Run(os.Args[1:])
 }
 
-func sudo(args ...string) error {
-	cmd := exec.Command("sudo", args...)
+// atTerminal runs a command with rembox's stdin, stdout and stderr, so it can
+// ask the user things itself.
+func atTerminal(name string, args ...string) error {
+	cmd := exec.Command(name, args...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	return cmd.Run()
+}
+
+// run shows a command, as you could paste it into a shell, then runs it.
+// rembox shows every command it runs, so you can see what it does to your
+// machines.
+func (a *App) run(name string, args ...string) error {
+	a.showCommand(name, args)
+	return a.Command(name, args...)
+}
+
+// errDeclined means the user chose not to run a command.
+var errDeclined = errors.New("cancelled")
+
+// runConfirmed is run for sensitive or destructive commands: it shows the
+// command, then asks before running it. If yes (from --yes), it doesn't ask.
+// It returns errDeclined if the answer is no.
+func (a *App) runConfirmed(yes bool, name string, args ...string) error {
+	a.showCommand(name, args)
+	if !yes {
+		ok, err := a.confirm("Run this command?", false)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return errDeclined
+		}
+	}
+	return a.Command(name, args...)
+}
+
+func (a *App) showCommand(name string, args []string) {
+	words := []string{"$", shellQuote(name)}
+	for _, arg := range args {
+		words = append(words, shellQuote(arg))
+	}
+	fmt.Fprintln(a.Stdout, strings.Join(words, " "))
+}
+
+var shellSafe = regexp.MustCompile(`^[A-Za-z0-9_@%+=:,./-]+$`)
+
+// shellQuote quotes s for a POSIX shell, if it needs it.
+func shellQuote(s string) string {
+	if shellSafe.MatchString(s) {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 func isTerminal(f *os.File) bool {
@@ -88,6 +140,18 @@ type command struct {
 // commands lists every command, in the order `rembox help` shows them.
 func commands() []command {
 	return []command{
+		{
+			name:    "setup",
+			summary: "Add a server, checking that ssh can log in to it",
+			help:    setupHelp,
+			run:     runSetup,
+		},
+		{
+			name:    "list",
+			summary: "List the servers you've added",
+			help:    listHelp,
+			run:     runList,
+		},
 		{
 			name:    "help",
 			summary: "Show help for rembox or one of its commands",
@@ -250,19 +314,48 @@ func (a *App) confirm(question string, def bool) (bool, error) {
 		hint = "[Y/n]"
 	}
 	fmt.Fprintf(a.Stdout, "%s %s ", question, hint)
-	if a.in == nil {
-		a.in = bufio.NewReader(a.Stdin)
-	}
-	line, err := a.in.ReadString('\n')
-	if err != nil && line == "" {
-		fmt.Fprintln(a.Stdout)
+	line, ok := a.readLine()
+	if !ok {
 		return def, nil
 	}
-	switch strings.ToLower(strings.TrimSpace(line)) {
+	switch strings.ToLower(line) {
 	case "":
 		return def, nil
 	case "y", "yes":
 		return true, nil
 	}
 	return false, nil
+}
+
+// ask asks a question and returns the answer, or def if it's empty. The end
+// of input (Ctrl-D) cancels, since a question may be asked until it's
+// answered.
+func (a *App) ask(question, def string) (string, error) {
+	if def != "" {
+		fmt.Fprintf(a.Stdout, "%s [%s]: ", question, def)
+	} else {
+		fmt.Fprintf(a.Stdout, "%s: ", question)
+	}
+	line, ok := a.readLine()
+	if !ok {
+		return "", errors.New("cancelled")
+	}
+	if line == "" {
+		return def, nil
+	}
+	return line, nil
+}
+
+// readLine reads a line of input without surrounding spaces. It returns false
+// at the end of input, after ending the question's line.
+func (a *App) readLine() (string, bool) {
+	if a.in == nil {
+		a.in = bufio.NewReader(a.Stdin)
+	}
+	line, err := a.in.ReadString('\n')
+	if err != nil && line == "" {
+		fmt.Fprintln(a.Stdout)
+		return "", false
+	}
+	return strings.TrimSpace(line), true
 }

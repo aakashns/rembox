@@ -18,8 +18,9 @@ Remove rembox from this machine: the rembox binary, and its files in
 asks first. If there are files, it offers to back them up to a .tar.gz in your
 home folder before deleting them. Servers set up with rembox aren't changed.
 
-If the binary is in a folder only root can write to, it asks for sudo to
-remove it. Run implode itself without sudo, so it finds your files.
+If the binary is in a folder only root can write to, it removes it with sudo,
+showing the command and asking before it runs it. Run implode itself without
+sudo, so it finds your files.
 
 Flags:
   -y, --yes     Remove without asking (and back up, unless --no-backup)
@@ -70,9 +71,6 @@ func runImplode(a *App, args []string) error {
 
 	// Checked before asking, so a yes isn't followed by a permissions error.
 	needSudo := release.CheckWritable(filepath.Dir(exe)) != nil
-	if needSudo && a.Sudo == nil {
-		return fmt.Errorf("can't remove %s; delete it as a user who can", exe)
-	}
 
 	if !yes {
 		ok, err := a.confirm("Remove rembox and its files?", false)
@@ -105,23 +103,28 @@ func runImplode(a *App, args []string) error {
 		}
 	}
 
-	if dirExists {
-		if err := os.RemoveAll(dir); err != nil {
-			return fmt.Errorf("removing %s: %w", dir, err)
-		}
-		fmt.Fprintf(a.Stdout, "Removed %s\n", dir)
-	}
-
+	// The binary goes first: if sudo is declined or fails, nothing is removed.
 	if needSudo {
-		fmt.Fprintf(a.Stdout, "Removing %s needs sudo\n", exe)
-		err = a.Sudo("rm", "-f", "--", exe)
+		fmt.Fprintf(a.Stdout, "Removing %s needs sudo:\n", exe)
+		err = a.runConfirmed(yes, "sudo", "rm", "-f", "--", exe)
+		if errors.Is(err, errDeclined) {
+			fmt.Fprintln(a.Stdout, "Nothing was removed.")
+			return nil
+		}
 	} else {
 		err = os.Remove(exe)
 	}
 	if err != nil {
-		return fmt.Errorf("removing %s: %w", exe, err)
+		return fmt.Errorf("removing %s: %w; nothing was removed", exe, err)
 	}
 	fmt.Fprintf(a.Stdout, "Removed %s\n", exe)
+
+	if dirExists {
+		if err := os.RemoveAll(dir); err != nil {
+			return fmt.Errorf("removing %s: %w; delete it yourself to finish", dir, err)
+		}
+		fmt.Fprintf(a.Stdout, "Removed %s\n", dir)
+	}
 	fmt.Fprintln(a.Stdout, "rembox is gone. To reinstall: curl -fsSL https://rembox.aakashns.com/install.sh | sh")
 	return nil
 }

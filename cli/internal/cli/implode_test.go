@@ -225,8 +225,7 @@ func TestImplodeUsesSudoForUnwritableFolder(t *testing.T) {
 	}
 	t.Cleanup(func() { os.Chmod(dir, 0o755) })
 	// The fake sudo removes the file, which needs the folder writable.
-	ta.Sudo = func(args ...string) error {
-		ta.sudoArgs = args
+	ta.onSudo = func(args []string) error {
 		os.Chmod(dir, 0o755)
 		return os.Remove(args[len(args)-1])
 	}
@@ -242,8 +241,40 @@ func TestImplodeUsesSudoForUnwritableFolder(t *testing.T) {
 	if got := strings.Join(ta.sudoArgs, " "); got != "rm -f -- "+exe {
 		t.Errorf("sudo %s", got)
 	}
-	if !strings.Contains(ta.stdout.String(), "needs sudo") {
-		t.Errorf("output doesn't say it needs sudo:\n%s", ta.stdout)
+	for _, want := range []string{"needs sudo", "$ sudo rm -f -- " + exe} {
+		if !strings.Contains(ta.stdout.String(), want) {
+			t.Errorf("output missing %q:\n%s", want, ta.stdout)
+		}
+	}
+}
+
+func TestImplodeSudoDeclined(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root can write anywhere")
+	}
+	ta := newTestApp(t, "0.1.0")
+	ta.withConfig(t)
+	dir := filepath.Dir(ta.exe)
+	if err := os.Chmod(dir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(dir, 0o755) })
+	ta.Interactive = true
+	ta.Stdin = strings.NewReader("y\nn\nn\n") // remove, don't back up, don't run sudo
+
+	if code := ta.Run([]string{"implode"}); code != 0 {
+		t.Fatalf("exit %d: %s", code, ta.stderr)
+	}
+	out := ta.stdout.String()
+	sudoAt, askAt := strings.Index(out, "$ sudo rm -f -- "), strings.Index(out, "Run this command? [y/N]")
+	if sudoAt < 0 || askAt < sudoAt {
+		t.Errorf("didn't show the sudo command, then ask:\n%s", out)
+	}
+	if ta.sudoArgs != nil {
+		t.Error("ran sudo after being told not to")
+	}
+	if !exists(ta.exe) || !exists(ta.configDir) || !strings.Contains(out, "Nothing was removed") {
+		t.Errorf("removed something:\n%s", out)
 	}
 }
 
