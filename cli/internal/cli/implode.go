@@ -70,9 +70,6 @@ func runImplode(a *App, args []string) error {
 
 	// Checked before asking, so a yes isn't followed by a permissions error.
 	needSudo := release.CheckWritable(filepath.Dir(exe)) != nil
-	if needSudo && a.Sudo == nil {
-		return fmt.Errorf("can't remove %s; delete it as a user who can", exe)
-	}
 
 	if !yes {
 		ok, err := a.confirm("Remove rembox and its files?", false)
@@ -114,7 +111,7 @@ func runImplode(a *App, args []string) error {
 
 	if needSudo {
 		fmt.Fprintf(a.Stdout, "Removing %s needs sudo\n", exe)
-		err = a.Sudo("rm", "-f", "--", exe)
+		err = a.run("sudo", "rm", "-f", "--", exe)
 	} else {
 		err = os.Remove(exe)
 	}

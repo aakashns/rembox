@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,10 +17,14 @@ import (
 type testApp struct {
 	*App
 	stdout, stderr *bytes.Buffer
-	exe            string // fake installed binary
-	home           string // fake home folder, where backups go
-	configDir      string // fake ~/.config/rembox (not created)
-	sudoArgs       []string
+	exe            string                    // fake installed binary
+	home           string                    // fake home folder, where backups go
+	configDir      string                    // fake ~/.config/rembox (not created)
+	commands       [][]string                // every command run, as name and args
+	sudoArgs       []string                  // the last sudo command's
+	sshArgs        []string                  // the last ssh command's
+	sshErr         error                     // what ssh returns
+	onSudo         func(args []string) error // replaces the fake sudo, which removes its last arg
 	srv            *releasetest.Server
 }
 
@@ -56,9 +61,20 @@ func newTestApp(t *testing.T, current string) *testApp {
 		ConfigDir:  func() (string, error) { return ta.configDir, nil },
 		HomeDir:    func() (string, error) { return home, nil },
 		Now:        func() time.Time { return time.Date(2026, 11, 12, 14, 30, 0, 0, time.UTC) },
-		Sudo: func(args ...string) error {
-			ta.sudoArgs = args
-			return os.Remove(args[len(args)-1]) // as if sudo rm had worked
+		Command: func(name string, args ...string) error {
+			ta.commands = append(ta.commands, append([]string{name}, args...))
+			switch name {
+			case "sudo":
+				ta.sudoArgs = args
+				if ta.onSudo != nil {
+					return ta.onSudo(args)
+				}
+				return os.Remove(args[len(args)-1]) // as if sudo rm had worked
+			case "ssh":
+				ta.sshArgs = args
+				return ta.sshErr
+			}
+			return fmt.Errorf("the tests don't fake %s", name)
 		},
 		Euid: 1000,
 	}
@@ -80,7 +96,7 @@ func TestHelp(t *testing.T) {
 		if code := ta.Run(args); code != 0 {
 			t.Errorf("rembox %v: exit %d", args, code)
 		}
-		for _, want := range []string{"Usage:", "help", "version", "upgrade", "implode"} {
+		for _, want := range []string{"Usage:", "setup", "list", "help", "version", "upgrade", "implode"} {
 			if !strings.Contains(ta.stdout.String(), want) {
 				t.Errorf("rembox %v: output missing %q:\n%s", args, want, ta.stdout)
 			}

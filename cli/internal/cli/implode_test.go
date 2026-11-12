@@ -225,8 +225,7 @@ func TestImplodeUsesSudoForUnwritableFolder(t *testing.T) {
 	}
 	t.Cleanup(func() { os.Chmod(dir, 0o755) })
 	// The fake sudo removes the file, which needs the folder writable.
-	ta.Sudo = func(args ...string) error {
-		ta.sudoArgs = args
+	ta.onSudo = func(args []string) error {
 		os.Chmod(dir, 0o755)
 		return os.Remove(args[len(args)-1])
 	}
@@ -242,8 +241,10 @@ func TestImplodeUsesSudoForUnwritableFolder(t *testing.T) {
 	if got := strings.Join(ta.sudoArgs, " "); got != "rm -f -- "+exe {
 		t.Errorf("sudo %s", got)
 	}
-	if !strings.Contains(ta.stdout.String(), "needs sudo") {
-		t.Errorf("output doesn't say it needs sudo:\n%s", ta.stdout)
+	for _, want := range []string{"needs sudo", "$ sudo rm -f -- " + exe} {
+		if !strings.Contains(ta.stdout.String(), want) {
+			t.Errorf("output missing %q:\n%s", want, ta.stdout)
+		}
 	}
 }
 
