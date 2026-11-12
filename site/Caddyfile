@@ -1,6 +1,6 @@
 # Serves rembox.aakashns.com from public/. Set the root to where this repo's site/public is on the server.
 rembox.aakashns.com {
-	root * /srv/rembox/site/public
+	root * /root/work/rembox/site/public
 	encode zstd gzip
 
 	header {
