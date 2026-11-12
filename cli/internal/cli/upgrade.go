@@ -87,6 +87,6 @@ func runUpgrade(a *App, args []string) error {
 	if err := release.ReplaceExecutable(exe, bin); err != nil {
 		return fmt.Errorf("installing the new version: %w", err)
 	}
-	fmt.Fprintf(a.Stdout, "Upgraded rembox to %s.\n", latest)
+	fmt.Fprintln(a.Stdout, a.paint(green, fmt.Sprintf("Upgraded rembox to %s.", latest)))
 	return nil
 }

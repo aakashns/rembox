@@ -26,6 +26,8 @@ type App struct {
 	Stdout      io.Writer
 	Stderr      io.Writer
 	Interactive bool // stdin is a terminal, so we can ask questions
+	Color       bool // color Stdout's output
+	ErrColor    bool // color Stderr's output
 
 	Releases   *release.Client
 	Executable func() (string, error) // path of the running binary
@@ -51,6 +53,8 @@ func Main() int {
 		Stdout:      os.Stdout,
 		Stderr:      os.Stderr,
 		Interactive: isTerminal(os.Stdin),
+		Color:       useColor(os.Stdout),
+		ErrColor:    useColor(os.Stderr),
 		Releases:    release.NewClient(),
 		Executable:  os.Executable,
 		GOOS:        runtime.GOOS,
@@ -105,7 +109,8 @@ func (a *App) showCommand(name string, args []string) {
 	for _, arg := range args {
 		words = append(words, shellQuote(arg))
 	}
-	fmt.Fprintln(a.Stdout, strings.Join(words, " "))
+	// A blank line sets the command apart from rembox's own output.
+	fmt.Fprintf(a.Stdout, "\n%s\n", a.paint(cyan, strings.Join(words, " ")))
 }
 
 var shellSafe = regexp.MustCompile(`^[A-Za-z0-9_@%+=:,./-]+$`)
@@ -121,6 +126,34 @@ func shellQuote(s string) string {
 func isTerminal(f *os.File) bool {
 	info, err := f.Stat()
 	return err == nil && info.Mode()&os.ModeCharDevice != 0
+}
+
+// useColor says whether to color what rembox writes to f: only at a terminal
+// that can show color, and not if NO_COLOR is set (https://no-color.org).
+func useColor(f *os.File) bool {
+	return isTerminal(f) && os.Getenv("NO_COLOR") == "" && os.Getenv("TERM") != "dumb"
+}
+
+// ANSI styles for paint.
+const (
+	bold   = "1"
+	red    = "31"
+	green  = "32"
+	yellow = "33"
+	cyan   = "36"
+)
+
+// paint styles s for Stdout, if it's in color.
+func (a *App) paint(style, s string) string { return paint(a.Color, style, s) }
+
+// paintErr styles s for Stderr, if it's in color.
+func (a *App) paintErr(style, s string) string { return paint(a.ErrColor, style, s) }
+
+func paint(on bool, style, s string) string {
+	if !on {
+		return s
+	}
+	return "\x1b[" + style + "m" + s + "\x1b[0m"
 }
 
 // Exit codes.
@@ -151,6 +184,12 @@ func commands() []command {
 			summary: "List the servers you've added",
 			help:    listHelp,
 			run:     runList,
+		},
+		{
+			name:    "ssh",
+			summary: "Log in to a server you've added, or run a command on it",
+			help:    sshHelp,
+			run:     runSSH,
 		},
 		{
 			name:    "help",
@@ -187,6 +226,13 @@ func findCommand(name string) (command, bool) {
 	}
 	return command{}, false
 }
+
+// exitStatus makes rembox exit with that status without a message, as when
+// passing on the status of a command it ran, which already said what went
+// wrong.
+type exitStatus int
+
+func (e exitStatus) Error() string { return fmt.Sprintf("exit status %d", int(e)) }
 
 // usageError means the command line was wrong; rembox exits with status 2.
 type usageError struct{ msg string }
@@ -232,7 +278,11 @@ func (a *App) fail(err error, cmdName string) int {
 	if err == nil {
 		return exitOK
 	}
-	fmt.Fprintf(a.Stderr, "rembox: %v\n", err)
+	var es exitStatus
+	if errors.As(err, &es) {
+		return int(es)
+	}
+	fmt.Fprintln(a.Stderr, a.paintErr(red, fmt.Sprintf("rembox: %v", err)))
 	var ue *usageError
 	if errors.As(err, &ue) {
 		if cmdName == "help" {
@@ -313,7 +363,7 @@ func (a *App) confirm(question string, def bool) (bool, error) {
 	if def {
 		hint = "[Y/n]"
 	}
-	fmt.Fprintf(a.Stdout, "%s %s ", question, hint)
+	fmt.Fprintf(a.Stdout, "%s %s ", a.paint(bold, question), hint)
 	line, ok := a.readLine()
 	if !ok {
 		return def, nil
@@ -332,9 +382,9 @@ func (a *App) confirm(question string, def bool) (bool, error) {
 // answered.
 func (a *App) ask(question, def string) (string, error) {
 	if def != "" {
-		fmt.Fprintf(a.Stdout, "%s [%s]: ", question, def)
+		fmt.Fprintf(a.Stdout, "%s [%s]: ", a.paint(bold, question), def)
 	} else {
-		fmt.Fprintf(a.Stdout, "%s: ", question)
+		fmt.Fprintf(a.Stdout, "%s: ", a.paint(bold, question))
 	}
 	line, ok := a.readLine()
 	if !ok {

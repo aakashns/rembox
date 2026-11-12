@@ -15,14 +15,14 @@ import (
 	"github.com/aakashns/rembox/cli/internal/config"
 )
 
-const setupHelp = `Usage: rembox setup [--host HOST] [--key PATH] [--name NAME]
+const setupHelp = `Usage: rembox setup [--host HOST] [--user USER] [--key PATH] [--name NAME]
 
-Add a server to rembox. Asks for the server's IP address or hostname, the SSH
-key to log in with, and a name for it (its hostname, by default). Then it
-checks that ssh can log in with that key, and saves the server so that
-'rembox list' shows it. Nothing is saved if ssh can't log in.
+Add a server to rembox. Asks for the server's IP address or hostname, the user
+to log in as (root, by default), the SSH key to log in with, and a name for it
+(its hostname, by default). Then it checks that ssh can log in with that key,
+and saves the server so that 'rembox list' shows it. Nothing is saved if ssh
+can't log in.
 
-rembox logs in as root unless you give a user, as in ubuntu@203.0.113.10.
 The first time you connect to a server, ssh adds its host key to
 ~/.ssh/known_hosts; if the key later changes, ssh refuses to connect.
 
@@ -30,7 +30,8 @@ Flags answer the questions up front. Without a terminal, setup uses the
 defaults for any question a flag doesn't answer, and fails if there isn't one.
 
 Flags:
-  --host HOST   The server's IP address or hostname, or user@host
+  --host HOST   The server's IP address or hostname
+  --user USER   The user to log in as (default root)
   --key PATH    The SSH private key to log in with (default ~/.ssh/id_ed25519,
                 or another key in ~/.ssh)
   --name NAME   What to call the server in rembox
@@ -41,8 +42,9 @@ var defaultKeys = []string{"id_ed25519", "id_ecdsa", "id_rsa"}
 
 func runSetup(a *App, args []string) error {
 	fs := flag.NewFlagSet("setup", flag.ContinueOnError)
-	var hostFlag, keyFlag, nameFlag string
+	var hostFlag, userFlag, keyFlag, nameFlag string
 	fs.StringVar(&hostFlag, "host", "", "")
+	fs.StringVar(&userFlag, "user", "", "")
 	fs.StringVar(&keyFlag, "key", "", "")
 	fs.StringVar(&nameFlag, "name", "", "")
 	if err := parseFlags(fs, args); err != nil {
@@ -57,14 +59,15 @@ func runSetup(a *App, args []string) error {
 		return fmt.Errorf("can't find your home folder: %w", err)
 	}
 
-	dest, err := a.answer("host", hostFlag,
-		"Server IP address or hostname (as user@host to log in as someone other than root)", "",
-		checkDestination)
+	var s config.Server
+	s.Host, err = a.answer("host", hostFlag, "Server IP address or hostname", "", checkHost)
 	if err != nil {
 		return err
 	}
-	var s config.Server
-	s.User, s.Host, _ = strings.Cut(dest, "@")
+	s.User, err = a.answer("user", userFlag, "User to log in as", "root", checkUser)
+	if err != nil {
+		return err
+	}
 
 	s.Key, err = a.answer("key", keyFlag, "SSH private key", defaultKey(home), func(p string) (string, error) {
 		return checkKey(home, p)
@@ -115,7 +118,8 @@ func runSetup(a *App, args []string) error {
 	if err := config.SaveServer(dir, s); err != nil {
 		return fmt.Errorf("saving %s: %w", s.Name, err)
 	}
-	fmt.Fprintf(a.Stdout, "Logged in. Saved %s (%s); 'rembox list' shows your servers.\n", s.Name, s.Destination())
+	fmt.Fprintln(a.Stdout, a.paint(green, fmt.Sprintf("Logged in. Saved %s (%s);", s.Name, s.Destination()))+
+		" 'rembox list' shows your servers.")
 	return nil
 }
 
@@ -144,7 +148,7 @@ func (a *App) answer(flagName, flagValue, question, def string, check func(strin
 		if v, err = check(v); err == nil {
 			return v, nil
 		}
-		fmt.Fprintf(a.Stdout, "  %v\n", err)
+		fmt.Fprintf(a.Stdout, "  %s\n", a.paint(yellow, err.Error()))
 	}
 }
 
@@ -153,22 +157,27 @@ var (
 	userPattern = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]*$`)
 )
 
-// checkDestination checks a host or user@host, and returns it as user@host.
-func checkDestination(v string) (string, error) {
-	user, host, ok := strings.Cut(v, "@")
-	if !ok {
-		user, host = "root", v
-	}
-	host = strings.TrimSuffix(strings.TrimPrefix(host, "["), "]") // [IPv6]
+// checkHost checks an IP address or hostname, and returns it without
+// brackets around an IPv6 address.
+func checkHost(v string) (string, error) {
+	host := strings.TrimSuffix(strings.TrimPrefix(v, "["), "]") // [IPv6]
 	switch {
 	case host == "":
 		return "", errors.New("enter the server's IP address or hostname")
+	case strings.Contains(host, "@"):
+		return "", errors.New("enter just the IP address or hostname; rembox asks for the user next")
 	case net.ParseIP(host) == nil && !hostPattern.MatchString(host):
 		return "", fmt.Errorf("%q isn't an IP address or hostname", host)
-	case !userPattern.MatchString(user):
+	}
+	return host, nil
+}
+
+// checkUser checks a user name to log in as.
+func checkUser(user string) (string, error) {
+	if !userPattern.MatchString(user) {
 		return "", fmt.Errorf("%q isn't a user name", user)
 	}
-	return user + "@" + host, nil
+	return user, nil
 }
 
 // checkKey checks that path (which may start with ~/) is a private key file,
@@ -211,18 +220,24 @@ func defaultKey(home string) string {
 // sshArgs are the arguments for ssh to log in to s with its key and do
 // nothing, to check that it can.
 func sshArgs(s config.Server, interactive bool) []string {
-	args := []string{
-		"-i", s.Key,
-		"-o", "IdentitiesOnly=yes", // just this key, not every key in the agent
+	args := append(keyArgs(s),
 		"-o", "PasswordAuthentication=no",
 		"-o", "KbdInteractiveAuthentication=no",
 		"-o", "StrictHostKeyChecking=accept-new",
 		"-o", "ConnectTimeout=15",
-	}
+	)
 	if !interactive {
 		args = append(args, "-o", "BatchMode=yes") // no one to type a key's passphrase
 	}
 	return append(args, "--", s.Destination(), "true")
+}
+
+// keyArgs are the ssh arguments to log in to s with its key.
+func keyArgs(s config.Server) []string {
+	return []string{
+		"-i", s.Key,
+		"-o", "IdentitiesOnly=yes", // just this key, not every key in the agent
+	}
 }
 
 // tildePath shows path with ~ for the home folder.
