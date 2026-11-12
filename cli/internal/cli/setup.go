@@ -23,12 +23,8 @@ Get a server ready for development, securely. rembox asks which server, the
 port and user to log in with (22 and root, by default), the SSH key to log in
 with, and a name for the server (its hostname, by default), and saves it, so
 'rembox list' and 'rembox ssh' know it. Then it asks for your user on the
-server (your username on this machine, by default) and the port to move ssh to
-(a random one, by default).
-
-rembox keeps a Host block for each server in ~/.config/rembox/ssh_config. It
-asks to include that at the top of ~/.ssh/config, so 'ssh NAME', and ssh to
-the server's address, log in on the new port as your user, as rembox does.
+server (your username on this machine, by default). It moves ssh to a random
+port, or keeps it where it is if that isn't 22.
 
 Then rembox runs setup.sh on the server, as root, in two ssh sessions. First,
 as the user you log in as, it:
@@ -42,8 +38,10 @@ as the user you log in as, it:
   4. Sets sshd to listen on the new port too, and let in only keys, and ufw,
      if it's on, to let in the new port.
 
-rembox then saves the server with your user and the new port, and logs in
-with them, which shows they work. Then setup.sh:
+rembox then saves the server with your user and the new port, and asks you to
+open the port in your cloud provider's firewall, if it has one, before it
+moves ssh there. It logs in as your user on the new port, which shows both
+work. Then setup.sh:
 
   5. Sets sshd to listen only on the new port, with no root login.
   6. Turns on ufw, the firewall, to block every incoming connection but ssh
@@ -60,6 +58,11 @@ so publish them on 127.0.0.1 only, like 'docker run -p 127.0.0.1:3000:3000'.
 ssh asks you to check the server's host key again the first time it logs in
 on the new port. If it can't log in there, open the port in your cloud
 provider's firewall, if it has one, then run 'rembox setup NAME' again.
+
+rembox keeps a Host block for each server in ~/.config/rembox/ssh_config. Once
+the server is set up, it asks to include that at the top of ~/.ssh/config, so
+'ssh NAME', and ssh to the server's address, log in on the new port as your
+user, as rembox does.
 
 Give the NAME of a server you've added to set it up again: its address, port,
 user and key are the defaults, and any you change replace them. Run it any
@@ -100,45 +103,45 @@ func runSetup(a *App, args []string) error {
 	if err != nil {
 		return err
 	}
-	portDefault := s.Port
-	if portDefault == config.DefaultPort {
-		portDefault = a.NewPort()
-	}
-	port, err := a.answer("Port to move ssh to", strconv.Itoa(portDefault), checkNewPort)
-	if err != nil {
-		return err
-	}
-	include, err := a.askInclude(s.Name)
-	if err != nil {
-		return err
+	// Keep ssh on the port it's on, unless that's 22.
+	port := s.Port
+	if port == config.DefaultPort {
+		port = a.NewPort()
 	}
 	if err := a.saveServer(s); err != nil {
 		return err
 	}
-	if include {
-		if err := a.include(); err != nil {
-			return err
-		}
-	}
 
 	// Each session does all it can, so ssh and sudo ask for a password at
 	// most once each.
-	err = a.runScript(s, asRoot(s, "bash", "-c"), remote.Setup, a.Stdout, "start", user, port, strconv.Itoa(s.Port))
+	err = a.runScript(s, asRoot(s, "bash", "-c"), remote.Setup, a.Stdout, "start", user, strconv.Itoa(port), strconv.Itoa(s.Port))
 	if cantLogIn(err) {
 		return fmt.Errorf("%w. To change the address, port, user or key: rembox setup %s", err, s.Name)
 	} else if err != nil {
 		return err
 	}
 
-	s.User, s.Port = user, mustAtoi(port)
+	// Saved before asking, so if you stop here, setup keeps this port next time.
+	oldPort := s.Port
+	s.User, s.Port = user, port
 	if err := a.saveServer(s); err != nil {
 		return err
 	}
-	err = a.runScript(s, asRoot(s, "bash", "-c"), remote.Setup, a.Stdout, "finish", port)
+	if port != oldPort {
+		a.note(fmt.Sprintf("If %s's cloud provider has a firewall, open port %d/tcp in it now.", s.Name, port))
+		if !a.confirm(fmt.Sprintf("Move ssh to port %d, closing port %d?", port, oldPort), false) {
+			return fmt.Errorf("ssh is on ports %d and %d for now. To move it to port %d: rembox setup %s",
+				oldPort, port, port, s.Name)
+		}
+	}
+	err = a.runScript(s, asRoot(s, "bash", "-c"), remote.Setup, a.Stdout, "finish", strconv.Itoa(port))
 	if cantLogIn(err) {
-		return fmt.Errorf("%w. If %s's cloud provider has a firewall, open port %s/tcp in it, then run rembox setup %s again",
+		return fmt.Errorf("%w. If %s's cloud provider has a firewall, open port %d/tcp in it, then run rembox setup %s again",
 			err, s.Name, port, s.Name)
 	} else if err != nil {
+		return err
+	}
+	if err := a.offerInclude(); err != nil {
 		return err
 	}
 	fmt.Fprintf(a.Stdout, "\n\n%s %s\n", a.paint(green, "==>"),
@@ -159,30 +162,25 @@ func (a *App) saveServer(s config.Server) error {
 	return nil
 }
 
-// askInclude asks to include rembox's ssh config in ~/.ssh/config, unless it
-// is already. It says whether to add it.
-func (a *App) askInclude(name string) (bool, error) {
-	home, dir, err := a.dirs()
-	if err != nil {
-		return false, err
-	}
-	if ok, err := hasInclude(home, dir); ok || err != nil {
-		return false, err
-	}
-	return a.confirm(fmt.Sprintf("Add '%s' to the top of ~/.ssh/config, so ssh %s logs in as rembox does?",
-		includeLine(home, dir), name), false), nil
-}
-
-// include adds rembox's ssh config to ~/.ssh/config.
-func (a *App) include() error {
+// offerInclude asks to include rembox's ssh config at the top of
+// ~/.ssh/config, unless it is already, and adds it if you say yes.
+func (a *App) offerInclude() error {
 	home, dir, err := a.dirs()
 	if err != nil {
 		return err
+	}
+	if ok, err := hasInclude(home, dir); ok || err != nil {
+		return err
+	}
+	line := includeLine(home, dir)
+	fmt.Fprintln(a.Stdout)
+	if !a.confirm(fmt.Sprintf("Add '%s' to ~/.ssh/config?", line), false) {
+		return nil
 	}
 	if err := addInclude(home, dir); err != nil {
 		return err
 	}
-	a.done(fmt.Sprintf("Added '%s' to ~/.ssh/config.", includeLine(home, dir)))
+	a.done(fmt.Sprintf("Added '%s' to ~/.ssh/config.", line))
 	return nil
 }
 
@@ -352,15 +350,6 @@ func checkPort(v string) (string, error) {
 		return "", fmt.Errorf("%q isn't a port; enter a number from 1 to 65535", v)
 	}
 	return strconv.Itoa(port), nil
-}
-
-// checkNewPort checks the port to move ssh to.
-func checkNewPort(v string) (string, error) {
-	v, err := checkPort(v)
-	if err == nil && v == strconv.Itoa(config.DefaultPort) {
-		err = fmt.Errorf("pick a port other than %d, which bots try to log in on all day", config.DefaultPort)
-	}
-	return v, err
 }
 
 // mustAtoi is the number in s, which a check has accepted.

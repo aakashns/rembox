@@ -36,7 +36,7 @@ type App struct {
 	ConfigDir func() (string, error) // where rembox keeps its files
 	HomeDir   func() (string, error) // for ~/.ssh
 	Username  string                 // yours on this machine, for your user on servers
-	NewPort   func() int             // a port to offer to move ssh to
+	NewPort   func() int             // a random port to move ssh to
 
 	// Command runs a program at the terminal, with its output going to stdout.
 	// Show the command first, as App.run does.
