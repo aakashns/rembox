@@ -38,15 +38,6 @@ func TestSSH(t *testing.T) {
 	}
 }
 
-func TestSSHOnlyServer(t *testing.T) {
-	ta := newTestApp(t, "0.1.0")
-	ta.withServers(t, "solo")
-	ta.mustRun(t, "ssh")
-	if !slices.Contains(ta.sshArgs, "dev@solo.example.com") {
-		t.Errorf("ssh args %q", ta.sshArgs)
-	}
-}
-
 func TestSSHErrors(t *testing.T) {
 	for _, tc := range []struct {
 		servers []string
@@ -54,8 +45,7 @@ func TestSSHErrors(t *testing.T) {
 		code    int
 		want    string
 	}{
-		{nil, []string{"ssh"}, 1, "no servers yet"},
-		{[]string{"a", "b"}, []string{"ssh"}, 2, "which server? You've added a, b"},
+		{[]string{"a"}, []string{"ssh"}, 2, "give the name of a server"},
 		{[]string{"a"}, []string{"ssh", "nope"}, 1, "there's no server named nope"},
 		{[]string{"a"}, []string{"ssh", "Bad!"}, 1, "can't be a name"},
 		{[]string{"a"}, []string{"ssh", "-x"}, 2, "unknown flag -x"},
