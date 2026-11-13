@@ -16,46 +16,50 @@ but follow this repo's conventions (AGENTS.md, and the style of `cli/internal/re
 - [x] ufw: block every incoming connection but ssh
 - [x] Restart the server, if an update needs it
 - [x] Base dev packages (`BASIC_PACKAGES` in `update.sh`): build-essential, git, gh, curl, wget,
-      zip, unzip, jq, ripgrep, fd-find (plus an `fd` link to `fdfind`), fzf, htop, tmux, zsh,
-      nano, man-db, dnsutils, ufw
+      zip, unzip, jq, ripgrep, fd-find (plus an `fd` link to `fdfind`), htop, tmux, zsh, nano,
+      man-db, dnsutils, ufw. fzf and zoxide come from their GitHub releases instead, pinned with
+      SHA-256s (`install_release`), as apt's are old (Debian 12: fzf 0.38, zoxide 0.4). Bump the
+      pins now and then. These install in `start` now, as `home` needs zsh and git.
 - [x] Swap file as big as memory, up to 4 GiB, unless there's swap already; swappiness 10
       (`swap.sh`). Skipped in containers.
 - [x] Generate the locales your Mac sends over ssh (LANG, LC_*), so programs don't warn
       (`locale.sh`). The CLI works them out from its environment and passes them to
       `setup.sh finish`. Not on the site, since it's a small thing.
+- [x] zsh as your login shell (`zsh.sh`), based on section 6 of
+      https://swiftace.org/posts/remote-development-environment-setup: zinit with
+      zsh-syntax-highlighting, zsh-completions, zsh-autosuggestions and OMZ's git aliases
+      (`OMZL::git.zsh` + `OMZP::git`; zinit's own aliases are off, so `zi` is zoxide's); fzf's
+      `fzf --zsh`; zoxide's `z`; the article's history and completion settings. No
+      Powerlevel10k: a hand-rolled prompt (host, folder, git branch, with `*` and `⇡N⇣N` from a
+      `git status` run in the background with `zle -F`), so no wizard or Nerd Font. TERM falls back
+      to xterm-256color only if the server has no terminfo for yours (like Ghostty's).
+  - **Shell config:** rembox owns `~/.config/rembox/{zshenv,zprofile,zshrc}`, which `~/.zshenv`,
+    `~/.zprofile` and `~/.zshrc` source from a line at their top, added once; your own settings go
+    below it. Re-runs rewrite only rembox's files. zshenv sets `skip_global_compinit` (Debian and
+    Ubuntu's /etc/zsh/zshrc runs compinit too early); zprofile sources `~/.profile` (for
+    `~/.local/bin`). Later steps that need PATH (bun, uv, cargo) add it to rembox's zprofile and
+    run their installers without touching shell files.
+  - **Running as your user:** a third ssh session, `setup.sh home`, as your user on the new port,
+    without sudo, between `start` and `finish` (finish may restart the server, so it stays last).
+    It's a real login (PAM, systemd user bus) at a terminal (`ssh -t`), for device-code logins.
+    Later user steps (git/gh, toolchains, agents) go in it. `finish` makes zsh the login shell, so
+    that happens only once `home` has set it up.
+  - zinit and its plugins download during `home` (`zsh -i -c exit`), unless they're there.
+    Re-runs don't update them; `zinit update` does.
+  - Later, maybe: Zellij auto-attach (section 7) and Neovim + LazyVim (section 8).
 
 ## Next
 
-1. [ ] **zsh, as your login shell, with the config from
-   https://swiftace.org/posts/remote-development-environment-setup (section 6), plus zoxide
-   as `z`.** Idempotent, like every step. The `.zshrc` there: `TERM=xterm-256color`; zinit
-   (cloned to `~/.local/share/zinit/zinit.git` if absent); Powerlevel10k; zsh-syntax-highlighting,
-   zsh-completions, zsh-autosuggestions; `OMZP::git` and `OMZP::gh` snippets; `compinit` +
-   `zinit cdreplay -q`; `~/.p10k.zsh` if present; history (5000, shared, no dups,
-   ignore-space); case-insensitive completion; `alias ls='ls --color'`; fzf's
-   `/usr/share/doc/fzf/examples/{completion,key-bindings}.zsh`. Add zoxide (apt package) with
-   `eval "$(zoxide init zsh)"`. Then `chsh -s "$(command -v zsh)"` for your user.
-   - Decide: rembox owns `~/.zshrc` (back up an existing one first, rewrite only if it differs),
-     or writes `~/.config/rembox/zshrc` and sources it from a line in `~/.zshrc`, so your own
-     edits survive re-runs. The second is friendlier to re-runs.
-   - Prefetch zinit and its plugins during setup (e.g. `zsh -ic exit` as the user), so the first
-     login isn't a wall of git clones. The Powerlevel10k wizard runs at first login; tell the
-     user that, and that a Nerd Font on the Mac (MesloLGS Nerd Font) makes its icons render.
-   - This is the first step that runs as your user, not root. Decide how: probably a third ssh
-     session as your user (no sudo), since rembox can already log in as them after `finish`,
-     rather than `runuser` from the root script. Settle it here; later
-     steps (git, toolchains, agents) reuse it.
-   - Later, maybe: Zellij auto-attach (section 7) and Neovim + LazyVim (section 8).
-2. [ ] **Git and GitHub.** `gh` comes from the distro now, which lags (2.23 on Debian 12, 2.45
+1. [ ] **Git and GitHub.** `gh` comes from the distro now, which lags (2.23 on Debian 12, 2.45
    on Ubuntu 24.04); consider GitHub's apt repo instead. Ask for your git name and email
    (offer `git config --global user.name/email` from this Mac as defaults), set them for your
-   user, run `gh auth login` (device code) and `gh auth setup-git`.
-3. [ ] **Toolchains, as your user, each optional:** bun; Node via Vite+ (`vp`, with
+   user, run `gh auth login` (device code) and `gh auth setup-git`, in the `home` session.
+2. [ ] **Toolchains, as your user, each optional:** bun; Node via Vite+ (`vp`, with
    `VP_BUN_MANAGER=no`); Python via uv; Rust via rustup (minimal + clippy + rustfmt).
-4. [ ] **Coding agents, each optional:** Codex, Claude Code, Pi, with their logins. A shared
+3. [ ] **Coding agents, each optional:** Codex, Claude Code, Pi, with their logins. A shared
    `~/.config/rembox/AGENTS.md` (or similar), symlinked to `~/.codex/AGENTS.md`,
    `~/.claude/CLAUDE.md` and `~/.pi/agent/AGENTS.md`; never overwrite real files.
-5. [ ] **HTTPS and T3 Code.** Ask for a domain, check its A record points at the server, install
+4. [ ] **HTTPS and T3 Code.** Ask for a domain, check its A record points at the server, install
    Caddy, reverse-proxy to T3 on 127.0.0.1:3773, enable linger so T3's systemd user service runs
    without a login, add its PATH drop-in, and pair a device (QR code). See SETUP.md's gotchas.
    - ufw: open 80/tcp, 443/tcp and 443/udp. `setup_firewall` in `firewall.sh` asks "Keep the ufw
@@ -66,7 +70,7 @@ but follow this repo's conventions (AGENTS.md, and the style of `cli/internal/re
 
 - Should `rembox setup` stay about hardening the server, with toolchains, agents and T3 as
   separate commands (like `rembox install claude`)? That keeps setup's questions and the site's
-  list short. Decide before step 3.
+  list short. Decide before step 2.
 
 ## Testing on real machines
 
@@ -78,3 +82,9 @@ but follow this repo's conventions (AGENTS.md, and the style of `cli/internal/re
   so they skip swap.
 - `~/workspace/scratch/devbox-setup/test/orb-fresh.sh` makes an OrbStack machine that looks
   like a fresh cloud server (cloud-init, root ssh with a key), for running `rembox setup` itself.
+  It makes Ubuntu machines; `orb create ... debian:bookworm` with the same cloud-config works for
+  Debian. Run rembox with `HOME` and `XDG_CONFIG_HOME` in a temp folder, so your own config is
+  untouched, and `expect` to answer its questions (they're in bold, so match loosely, and set a
+  timeout that fails loudly).
+- Steps for your user (`home`) run with `orb -m NAME -u USER`. To try zsh interactively, start
+  `tmux new-session -d 'zsh -l'` on the server, `tmux send-keys`, then `tmux capture-pane -p`.

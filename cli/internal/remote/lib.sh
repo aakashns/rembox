@@ -101,7 +101,7 @@ same() {
 }
 
 # put FILE MODE CONTENT [CHECK...]: shows CONTENT, then writes it to FILE, owned
-# by root, with MODE. If given, CHECK runs first with the new file's path at
+# by the user running the script, with MODE. If given, CHECK runs first with the new file's path at
 # the end, and FILE stays as it is unless CHECK succeeds.
 put() {
   local file=$1 mode=$2 content=$3
@@ -110,7 +110,7 @@ put() {
   sed "s/^/      ${DIM}/; s/\$/${RESET}/" <<<"$content"
   local new=$file.rembox-new
   printf '%s\n' "$content" >"$new"
-  chown root:root "$new"
+  chown "$(id -un):$(id -gn)" "$new"
   chmod "$mode" "$new"
   if (($# > 0)) && ! run "$@" "$new"; then
     rm -f "$new"

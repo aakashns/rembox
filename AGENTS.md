@@ -10,4 +10,5 @@
 - `rembox setup` must be idempotent: every step in `cli/internal/remote` checks the server's
   state and changes only what needs changing, so running it again is harmless.
 - `plan.md` is the roadmap: what's done, what's next. Keep it current in every PR.
+- README.md lists the server scripts in the order they run; keep it current when adding one.
 - Every PR bumps `cli/VERSION` (merging releases it) and updates the site as needed.
