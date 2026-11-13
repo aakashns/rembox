@@ -75,3 +75,22 @@ install_packages() {
     run "${APT[@]}" install "${missing[@]}"
   fi
 }
+
+# The tools for development every server gets. ufw is here too, though
+# setup_firewall installs it first.
+BASIC_PACKAGES=(
+  build-essential git gh curl wget zip unzip jq ripgrep fd-find fzf
+  htop tmux zsh nano man-db dnsutils ufw
+)
+
+# install_basics: installs BASIC_PACKAGES, the ones that aren't installed yet.
+# Debian names fd's command fdfind, as another package has fd, so it adds fd
+# too, unless there's one already.
+install_basics() {
+  step "Install tools for development: ${BASIC_PACKAGES[*]}"
+  install_packages "${BASIC_PACKAGES[@]}"
+  if ! command -v fd >/dev/null && [[ -x /usr/bin/fdfind ]]; then
+    run ln -s /usr/bin/fdfind /usr/local/bin/fd
+  fi
+  ok "The tools for development are installed."
+}

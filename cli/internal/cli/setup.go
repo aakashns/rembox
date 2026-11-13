@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -50,7 +51,14 @@ work. Then setup.sh:
      on the new port, over IPv4 and IPv6. It deletes ufw's rules for port 22,
      and asks whether to keep each of its other rules that let something in.
   8. Sets up fail2ban to ban IP addresses that keep failing to log in.
-  9. Asks to restart the server, if an update needs it.
+  9. Installs tools for development: build-essential, git, gh, curl, wget,
+     zip, unzip, jq, ripgrep, fd (Debian's fd-find, with fd for fdfind),
+     fzf, htop, tmux, zsh, nano, man-db and dnsutils (dig).
+ 10. Adds a swap file as big as the server's memory, up to 4 GiB, unless it
+     has swap already, and has it swap only once memory runs low.
+ 11. Adds the locale this machine uses, like en_US.UTF-8, which ssh passes on,
+     so programs on the server don't warn that they can't use it.
+ 12. Asks to restart the server, if an update needs it.
 
 To reach a program on the server, like a dev server or database, forward its
 port over ssh: 'ssh -L 3000:localhost:3000 NAME' makes localhost:3000 on this
@@ -136,7 +144,8 @@ func runSetup(a *App, args []string) error {
 				oldPort, port, port, s.Name)
 		}
 	}
-	err = a.runScript(s, asRoot(s, "bash", "-c"), remote.Setup, a.Stdout, "finish", strconv.Itoa(port))
+	finish := append([]string{"finish", strconv.Itoa(port)}, a.Locales...)
+	err = a.runScript(s, asRoot(s, "bash", "-c"), remote.Setup, a.Stdout, finish...)
 	if cantLogIn(err) {
 		return fmt.Errorf("%w. If %s's cloud provider has a firewall, open port %d/tcp in it, then run rembox setup %s again",
 			err, s.Name, port, s.Name)
@@ -149,6 +158,29 @@ func runSetup(a *App, args []string) error {
 	fmt.Fprintf(a.Stdout, "\n\n%s %s\n", a.paint(green, "==>"),
 		a.paint(bold, fmt.Sprintf("%s is set up. To log in: rembox ssh %s", s.Name, s.Name)))
 	return nil
+}
+
+// localePattern is a UTF-8 locale, as your Mac or a Linux machine names it,
+// like en_US.UTF-8 or en_US.utf8.
+var localePattern = regexp.MustCompile(`^([a-z]{2,3}_[A-Z]{2})\.(?i:utf-?8)$`)
+
+// sentLocales are the UTF-8 locales in env, a list of KEY=VALUE, that ssh
+// passes on to servers (it sends LANG and LC_*), as servers name them, like
+// en_US.UTF-8, sorted, once each. Others, like C or macOS's plain UTF-8,
+// can't be added to a server, so they're left out.
+func sentLocales(env []string) []string {
+	var locales []string
+	for _, kv := range env {
+		k, v, _ := strings.Cut(kv, "=")
+		if k != "LANG" && !strings.HasPrefix(k, "LC_") {
+			continue
+		}
+		if m := localePattern.FindStringSubmatch(v); m != nil {
+			locales = append(locales, m[1]+".UTF-8")
+		}
+	}
+	slices.Sort(locales)
+	return slices.Compact(locales)
 }
 
 // saveServer saves s, and says so.

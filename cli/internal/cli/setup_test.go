@@ -102,7 +102,7 @@ func TestSetup(t *testing.T) {
 		!slices.Contains(second, "sudo") || !slices.Equal(scriptArgs(second), []string{"finish", "23456"}) {
 		t.Errorf("second session's args %q", second)
 	}
-	files := `"$(cat lib.sh check.sh update.sh user.sh sshd.sh firewall.sh fail2ban.sh restart.sh setup.sh)"`
+	files := `"$(cat lib.sh check.sh update.sh user.sh sshd.sh firewall.sh fail2ban.sh swap.sh locale.sh restart.sh setup.sh)"`
 	if !strings.Contains(out, "\n$ ssh -t -p 22 -i "+key+" -o IdentitiesOnly=yes") ||
 		!strings.Contains(out, "root@203.0.113.10 bash -c "+files+" bash start ada 23456 22\n"+
 			"  These scripts come with rembox; read them at https://github.com/aakashns/rembox/tree/v0.1.0/cli/internal/remote\n") ||
@@ -172,6 +172,35 @@ func TestSetupAgain(t *testing.T) {
 	}
 	if s := ta.sessions(); len(s) != 2 || !slices.Equal(scriptArgs(s[0]), []string{"start", "ada", "2222", "2222"}) {
 		t.Errorf("sessions %q", s)
+	}
+}
+
+func TestSetupLocales(t *testing.T) {
+	ta := newTestApp(t, "0.1.0")
+	ta.withKey(t, "id_ed25519")
+	ta.Locales = []string{"en_IN.UTF-8", "en_US.UTF-8"}
+	ta.typing("203.0.113.10", "", "", "", "box1", "", "y")
+	ta.mustRun(t, "setup")
+	// Only the second session, as your user, adds them.
+	s := ta.sessions()
+	if len(s) != 2 || !slices.Equal(scriptArgs(s[0]), []string{"start", "ada", "23456", "22"}) ||
+		!slices.Equal(scriptArgs(s[1]), []string{"finish", "23456", "en_IN.UTF-8", "en_US.UTF-8"}) {
+		t.Errorf("sessions %q", s)
+	}
+}
+
+func TestSentLocales(t *testing.T) {
+	env := []string{
+		"HOME=/Users/ada", "LANG=en_US.UTF-8", "LC_ALL=en_IN.utf8", "LC_CTYPE=UTF-8", // macOS's plain UTF-8
+		"LC_TIME=C", "LC_NUMERIC=C.UTF-8", "LC_MONETARY=de_DE.ISO8859-1", "LC_COLLATE=en_US.UTF-8",
+		"LANGUAGE=fr_FR.UTF-8", // ssh doesn't send it
+		"LC_MESSAGES=en_US.UTF-8; rm -rf /",
+	}
+	if got, want := sentLocales(env), []string{"en_IN.UTF-8", "en_US.UTF-8"}; !slices.Equal(got, want) {
+		t.Errorf("sentLocales = %q, want %q", got, want)
+	}
+	if got := sentLocales([]string{"PATH=/bin"}); got != nil {
+		t.Errorf("sentLocales with none = %q", got)
 	}
 }
 
