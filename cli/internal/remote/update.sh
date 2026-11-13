@@ -1,4 +1,5 @@
-# update.sh: installs packages with apt.
+# update.sh: installs packages with apt, and has it install security updates
+# every day.
 
 export DEBIAN_FRONTEND=noninteractive # apt never stops to ask a question
 # Wait up to 5 minutes for another apt (like unattended-upgrades) to finish,
@@ -31,6 +32,37 @@ update() {
 
   step "Remove packages that are no longer needed"
   run "${APT[@]}" autoremove
+}
+
+AUTO_UPGRADES=/etc/apt/apt.conf.d/99rembox-auto-upgrades
+
+# setup_auto_upgrades: has unattended-upgrades install security updates every
+# day. It never restarts the server; restart asks to, the next time setup runs.
+setup_auto_upgrades() {
+  step "Install security updates every day, with unattended-upgrades"
+  install_packages unattended-upgrades
+  # 99, so it comes after, and wins over, 20auto-upgrades, which may turn
+  # them off. unattended-upgrades' own config says which updates it installs.
+  local content
+  content=$(
+    echo "// Written by rembox setup."
+    echo 'APT::Periodic::Update-Package-Lists "1";'
+    echo 'APT::Periodic::Unattended-Upgrade "1";'
+  )
+  same "$AUTO_UPGRADES" "$content" || put "$AUTO_UPGRADES" 644 "$content"
+  # apt's timers run unattended-upgrades.
+  local timer
+  for timer in apt-daily.timer apt-daily-upgrade.timer; do
+    systemctl is-enabled --quiet "$timer" || run systemctl enable --now "$timer"
+  done
+
+  local lists='' upgrade=''
+  eval "$(apt-config shell lists APT::Periodic::Update-Package-Lists upgrade APT::Periodic::Unattended-Upgrade)"
+  if [[ $lists == 1 && $upgrade == 1 ]]; then
+    ok "unattended-upgrades installs security updates every day."
+  else
+    warn "A file in /etc/apt/apt.conf.d that comes after $AUTO_UPGRADES turns off daily updates. To have unattended-upgrades install them, remove what it says about APT::Periodic."
+  fi
 }
 
 # install_packages PACKAGE...: installs the packages that aren't installed yet.

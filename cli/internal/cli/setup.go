@@ -31,11 +31,13 @@ as the user you log in as, it:
 
   1. Checks that rembox can set up the server: so far, Ubuntu or Debian.
   2. Installs the latest version of every package with apt.
-  3. Adds your user, if it isn't there yet, with sudo and the SSH keys of the
+  3. Has unattended-upgrades install security updates every day. It doesn't
+     restart the server for them; setup asks to, the next time you run it.
+  4. Adds your user, if it isn't there yet, with sudo and the SSH keys of the
      user you log in as, and asks you for a password for it, if it has none.
      sudo asks for it, so programs running as your user, like coding agents,
      can't run commands as root without you.
-  4. Sets sshd to listen on the new port too, and let in only keys, and ufw,
+  5. Sets sshd to listen on the new port too, and let in only keys, and ufw,
      if it's on, to let in the new port.
 
 rembox then saves the server with your user and the new port, and asks you to
@@ -43,12 +45,12 @@ open the port in your cloud provider's firewall, if it has one, before it
 moves ssh there. It logs in as your user on the new port, which shows both
 work. Then setup.sh:
 
-  5. Sets sshd to listen only on the new port, with no root login.
-  6. Turns on ufw, the firewall, to block every incoming connection but ssh
+  6. Sets sshd to listen only on the new port, with no root login.
+  7. Turns on ufw, the firewall, to block every incoming connection but ssh
      on the new port, over IPv4 and IPv6. It deletes ufw's rules for port 22,
      and asks whether to keep each of its other rules that let something in.
-  7. Sets up fail2ban to ban IP addresses that keep failing to log in.
-  8. Asks to restart the server, if an update needs it.
+  8. Sets up fail2ban to ban IP addresses that keep failing to log in.
+  9. Asks to restart the server, if an update needs it.
 
 To reach a program on the server, like a dev server or database, forward its
 port over ssh: 'ssh -L 3000:localhost:3000 NAME' makes localhost:3000 on this
