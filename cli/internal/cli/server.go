@@ -30,13 +30,19 @@ func sshArgs(s config.Server, command ...string) []string {
 	return append(args, command...)
 }
 
+// asUser is sshArgs to run command on s as the user rembox logs in as, at a
+// terminal (-t), so the command can ask questions.
+func asUser(s config.Server, command ...string) []string {
+	return append([]string{"-t"}, sshArgs(s, command...)...)
+}
+
 // asRoot is sshArgs to run command on s as root (with sudo unless rembox logs
 // in as root), at a terminal (-t), so sudo and the command can ask questions.
 func asRoot(s config.Server, command ...string) []string {
 	if s.User != "root" {
 		command = append([]string{"sudo"}, command...)
 	}
-	return append([]string{"-t"}, sshArgs(s, command...)...)
+	return asUser(s, command...)
 }
 
 // runScript runs script on s with scriptArgs, after showing the command, with

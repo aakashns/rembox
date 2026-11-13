@@ -27,38 +27,45 @@ with, and a name for the server (its hostname, by default), and saves it, so
 server (your username on this machine, by default). It moves ssh to a random
 port, or keeps it where it is if that isn't 22.
 
-Then rembox runs setup.sh on the server, as root, in two ssh sessions. First,
-as the user you log in as, it:
+Then rembox runs setup.sh on the server, in three ssh sessions. First, as
+root, as the user you log in as, it:
 
   1. Checks that rembox can set up the server: so far, Ubuntu or Debian.
   2. Installs the latest version of every package with apt.
   3. Has unattended-upgrades install security updates every day. It doesn't
      restart the server for them; setup asks to, the next time you run it.
-  4. Adds your user, if it isn't there yet, with sudo and the SSH keys of the
+  4. Installs tools for development: build-essential, git, gh, curl, wget,
+     zip, unzip, jq, ripgrep, fd, htop, tmux, zsh, nano, man-db and dig, and
+     fzf and zoxide from their own releases, as apt's are old.
+  5. Adds your user, if it isn't there yet, with sudo and the SSH keys of the
      user you log in as, and asks you for a password for it, if it has none.
      sudo asks for it, so programs running as your user, like coding agents,
      can't run commands as root without you.
-  5. Sets sshd to listen on the new port too, and let in only keys, and ufw,
+  6. Sets sshd to listen on the new port too, and let in only keys, and ufw,
      if it's on, to let in the new port.
 
 rembox then saves the server with your user and the new port, and asks you to
 open the port in your cloud provider's firewall, if it has one, before it
 moves ssh there. It logs in as your user on the new port, which shows both
-work. Then setup.sh:
+work, and setup.sh, as your user:
 
-  6. Sets sshd to listen only on the new port, with no root login.
-  7. Turns on ufw, the firewall, to block every incoming connection but ssh
+  7. Sets up zsh: autosuggestions, syntax highlighting, fzf, zoxide's z, and
+     a prompt with the git branch and status. rembox's config is in
+     ~/.config/rembox; yours goes in ~/.zshrc, and wins.
+
+Then, as root:
+
+  8. Sets sshd to listen only on the new port, with no root login.
+  9. Turns on ufw, the firewall, to block every incoming connection but ssh
      on the new port, over IPv4 and IPv6. It deletes ufw's rules for port 22,
      and asks whether to keep each of its other rules that let something in.
-  8. Sets up fail2ban to ban IP addresses that keep failing to log in.
-  9. Installs tools for development: build-essential, git, gh, curl, wget,
-     zip, unzip, jq, ripgrep, fd (Debian's fd-find, with fd for fdfind),
-     fzf, htop, tmux, zsh, nano, man-db and dnsutils (dig).
- 10. Adds a swap file as big as the server's memory, up to 4 GiB, unless it
+ 10. Sets up fail2ban to ban IP addresses that keep failing to log in.
+ 11. Adds a swap file as big as the server's memory, up to 4 GiB, unless it
      has swap already, and has it swap only once memory runs low.
- 11. Adds the locale this machine uses, like en_US.UTF-8, which ssh passes on,
+ 12. Adds the locale this machine uses, like en_US.UTF-8, which ssh passes on,
      so programs on the server don't warn that they can't use it.
- 12. Asks to restart the server, if an update needs it.
+ 13. Makes zsh your user's login shell.
+ 14. Asks to restart the server, if an update needs it.
 
 To reach a program on the server, like a dev server or database, forward its
 port over ssh: 'ssh -L 3000:localhost:3000 NAME' makes localhost:3000 on this
@@ -144,12 +151,20 @@ func runSetup(a *App, args []string) error {
 				oldPort, port, port, s.Name)
 		}
 	}
-	finish := append([]string{"finish", strconv.Itoa(port)}, a.Locales...)
-	err = a.runScript(s, asRoot(s, "bash", "-c"), remote.Setup, a.Stdout, finish...)
-	if cantLogIn(err) {
-		return fmt.Errorf("%w. If %s's cloud provider has a firewall, open port %d/tcp in it, then run rembox setup %s again",
-			err, s.Name, port, s.Name)
-	} else if err != nil {
+	// The rest logs in as your user on the new port, which shows both work:
+	// first without sudo, to set up your shell, then as root.
+	onNewPort := func(err error) error {
+		if cantLogIn(err) {
+			return fmt.Errorf("%w. If %s's cloud provider has a firewall, open port %d/tcp in it, then run rembox setup %s again",
+				err, s.Name, port, s.Name)
+		}
+		return err
+	}
+	if err := onNewPort(a.runScript(s, asUser(s, "bash", "-c"), remote.Setup, a.Stdout, "home")); err != nil {
+		return err
+	}
+	finish := append([]string{"finish", user, strconv.Itoa(port)}, a.Locales...)
+	if err := onNewPort(a.runScript(s, asRoot(s, "bash", "-c"), remote.Setup, a.Stdout, finish...)); err != nil {
 		return err
 	}
 	if err := a.offerInclude(); err != nil {

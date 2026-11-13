@@ -1,19 +1,21 @@
-# setup.sh: gets the server ready for development. rembox setup runs it as
-# root, twice, in two ssh sessions:
+# setup.sh: gets the server ready for development. rembox setup runs it three
+# times, in three ssh sessions:
 #
 #   setup.sh start USER PORT LOGIN_PORT
-#     As the user you log in as, on LOGIN_PORT: checks that rembox can set up
-#     the server, installs the latest version of every package, has
-#     unattended-upgrades install security updates every day, adds USER
-#     with your keys, and sets sshd to listen on PORT as well, and ufw, if
-#     it's on, to let it in.
+#     As root, as the user you log in as, on LOGIN_PORT: checks that rembox
+#     can set up the server, installs the latest version of every package,
+#     has unattended-upgrades install security updates every day, installs
+#     tools for development, adds USER with your keys, and sets sshd to
+#     listen on PORT as well, and ufw, if it's on, to let it in.
 #
-#   setup.sh finish PORT [LOCALE...]
-#     As USER, on PORT, which shows that both work: sets sshd to listen only
-#     on PORT, with no root login, turns on ufw to block every incoming
-#     connection but ssh on PORT, sets up fail2ban, installs tools for
-#     development, adds swap and the LOCALEs your Mac uses, then, if an update
-#     needs it, asks to restart the server.
+#   setup.sh home
+#     As USER, on PORT, which shows that both work: sets up zsh for USER.
+#
+#   setup.sh finish USER PORT [LOCALE...]
+#     As root, as USER: sets sshd to listen only on PORT, with no root login,
+#     turns on ufw to block every incoming connection but ssh on PORT, sets
+#     up fail2ban, adds swap and the LOCALEs your Mac uses, makes zsh USER's
+#     login shell, then, if an update needs it, asks to restart the server.
 #
 # Running it again is harmless: each step changes only what needs changing.
 
@@ -28,24 +30,29 @@ main() {
     check
     update
     setup_auto_upgrades
+    install_basics
     add_user "$user"
     setup_sshd "$root_login" "$login_port" "$port"
     open_ssh_port "$port"
     ;;
+  home)
+    (($# == 1)) || fail "Usage: setup.sh home"
+    setup_zsh
+    ;;
   finish)
-    (($# >= 2)) || fail "Usage: setup.sh finish PORT [LOCALE...]"
-    local port=$2
-    shift 2
+    (($# >= 3)) || fail "Usage: setup.sh finish USER PORT [LOCALE...]"
+    local user=$2 port=$3
+    shift 3
     setup_sshd no "$port"
     setup_firewall "$port"
     setup_fail2ban "$port"
-    install_basics
     setup_swap
     setup_locales "$@"
+    set_login_shell "$user"
     restart
     ;;
   *)
-    fail "Usage: setup.sh start USER PORT LOGIN_PORT, or setup.sh finish PORT [LOCALE...]"
+    fail "Usage: setup.sh start USER PORT LOGIN_PORT, setup.sh home, or setup.sh finish USER PORT [LOCALE...]"
     ;;
   esac
 }

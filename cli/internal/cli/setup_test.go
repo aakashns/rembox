@@ -86,27 +86,32 @@ func TestSetup(t *testing.T) {
 		t.Errorf("saved %+v, want %+v", got, want)
 	}
 
-	// Two ssh sessions at a terminal: as root on port 22, then as ada on the
-	// new port, with sudo.
+	// Three ssh sessions at a terminal: as root on port 22, then as ada on the
+	// new port, without sudo, then with it.
 	sessions := ta.sessions()
-	if len(sessions) != 2 || len(ta.commands) != 2 || !slices.Equal(ta.scripts, []string{"setup.sh", "setup.sh"}) {
+	if len(sessions) != 3 || len(ta.commands) != 3 || !slices.Equal(ta.scripts, []string{"setup.sh", "setup.sh", "setup.sh"}) {
 		t.Fatalf("ran %q", ta.commands)
 	}
-	first, second := sessions[0], sessions[1]
+	first, home, second := sessions[0], sessions[1], sessions[2]
 	if !slices.Equal(first[:3], []string{"-t", "-p", "22"}) || !slices.Contains(first, "root@203.0.113.10") ||
 		!slices.Contains(first, key) || slices.Contains(first, "sudo") ||
 		!slices.Equal(scriptArgs(first), []string{"start", "ada", "23456", "22"}) {
 		t.Errorf("first session's args %q", first)
 	}
-	if !slices.Equal(second[:3], []string{"-t", "-p", "23456"}) || !slices.Contains(second, "ada@203.0.113.10") ||
-		!slices.Contains(second, "sudo") || !slices.Equal(scriptArgs(second), []string{"finish", "23456"}) {
-		t.Errorf("second session's args %q", second)
+	if !slices.Equal(home[:3], []string{"-t", "-p", "23456"}) || !slices.Contains(home, "ada@203.0.113.10") ||
+		slices.Contains(home, "sudo") || !slices.Equal(scriptArgs(home), []string{"home"}) {
+		t.Errorf("home session's args %q", home)
 	}
-	files := `"$(cat lib.sh check.sh update.sh user.sh sshd.sh firewall.sh fail2ban.sh swap.sh locale.sh restart.sh setup.sh)"`
+	if !slices.Equal(second[:3], []string{"-t", "-p", "23456"}) || !slices.Contains(second, "ada@203.0.113.10") ||
+		!slices.Contains(second, "sudo") || !slices.Equal(scriptArgs(second), []string{"finish", "ada", "23456"}) {
+		t.Errorf("last session's args %q", second)
+	}
+	files := `"$(cat lib.sh check.sh update.sh user.sh sshd.sh firewall.sh zsh.sh fail2ban.sh swap.sh locale.sh restart.sh setup.sh)"`
 	if !strings.Contains(out, "\n$ ssh -t -p 22 -i "+key+" -o IdentitiesOnly=yes") ||
 		!strings.Contains(out, "root@203.0.113.10 bash -c "+files+" bash start ada 23456 22\n"+
 			"  These scripts come with rembox; read them at https://github.com/aakashns/rembox/tree/v0.1.0/cli/internal/remote\n") ||
-		!strings.Contains(out, "ada@203.0.113.10 sudo bash -c "+files+" bash finish 23456\n") {
+		!strings.Contains(out, "ada@203.0.113.10 bash -c "+files+" bash home\n") ||
+		!strings.Contains(out, "ada@203.0.113.10 sudo bash -c "+files+" bash finish ada 23456\n") {
 		t.Errorf("output doesn't show the scripts' commands:\n%s", out)
 	}
 	if strings.Index(out, "User to log in as") > strings.Index(out, "SSH private key") {
@@ -170,7 +175,7 @@ func TestSetupAgain(t *testing.T) {
 	if got := ta.servers(t); !slices.Equal(got, want) {
 		t.Errorf("saved %+v, want %+v", got, want)
 	}
-	if s := ta.sessions(); len(s) != 2 || !slices.Equal(scriptArgs(s[0]), []string{"start", "ada", "2222", "2222"}) {
+	if s := ta.sessions(); len(s) != 3 || !slices.Equal(scriptArgs(s[0]), []string{"start", "ada", "2222", "2222"}) {
 		t.Errorf("sessions %q", s)
 	}
 }
@@ -181,10 +186,10 @@ func TestSetupLocales(t *testing.T) {
 	ta.Locales = []string{"en_IN.UTF-8", "en_US.UTF-8"}
 	ta.typing("203.0.113.10", "", "", "", "box1", "", "y")
 	ta.mustRun(t, "setup")
-	// Only the second session, as your user, adds them.
+	// Only the last session adds them.
 	s := ta.sessions()
-	if len(s) != 2 || !slices.Equal(scriptArgs(s[0]), []string{"start", "ada", "23456", "22"}) ||
-		!slices.Equal(scriptArgs(s[1]), []string{"finish", "23456", "en_IN.UTF-8", "en_US.UTF-8"}) {
+	if len(s) != 3 || !slices.Equal(scriptArgs(s[0]), []string{"start", "ada", "23456", "22"}) ||
+		!slices.Equal(scriptArgs(s[2]), []string{"finish", "ada", "23456", "en_IN.UTF-8", "en_US.UTF-8"}) {
 		t.Errorf("sessions %q", s)
 	}
 }
@@ -272,23 +277,29 @@ func TestSetupCantConnect(t *testing.T) {
 }
 
 func TestSetupCantLogInOnNewPort(t *testing.T) {
-	ta := newTestApp(t, "0.1.0")
-	ta.withKey(t, "id_ed25519")
-	ta.onScript = func(_ string, args []string, _ io.Writer) error {
-		if slices.Contains(args, "finish") {
-			return exitWith(255)
+	// Either session on the new port, as your user or as root.
+	for _, failing := range []string{"home", "finish"} {
+		ta := newTestApp(t, "0.1.0")
+		ta.withKey(t, "id_ed25519")
+		ta.onScript = func(_ string, args []string, _ io.Writer) error {
+			if slices.Contains(args, failing) {
+				return exitWith(255)
+			}
+			return nil
 		}
-		return nil
-	}
-	ta.typing("box.example.com", "", "", "", "", "", "y")
-	ta.mustFail(t, "ssh couldn't log in to ada@box.example.com on port 23456 (exit status 255). "+
-		"If box.example.com's cloud provider has a firewall, open port 23456/tcp in it, then run rembox setup box.example.com again", "setup")
-	if strings.Contains(ta.stdout.String(), "~/.ssh/config") {
-		t.Errorf("offered to change ~/.ssh/config before the server was set up:\n%s", ta.stdout)
-	}
-	// Saved with the new user and port, so running setup again tries them.
-	if got := ta.servers(t); len(got) != 1 || got[0].User != "ada" || got[0].Port != 23456 {
-		t.Errorf("saved %+v", got)
+		ta.typing("box.example.com", "", "", "", "", "", "y")
+		ta.mustFail(t, "ssh couldn't log in to ada@box.example.com on port 23456 (exit status 255). "+
+			"If box.example.com's cloud provider has a firewall, open port 23456/tcp in it, then run rembox setup box.example.com again", "setup")
+		if strings.Contains(ta.stdout.String(), "~/.ssh/config") {
+			t.Errorf("%s: offered to change ~/.ssh/config before the server was set up:\n%s", failing, ta.stdout)
+		}
+		// Saved with the new user and port, so running setup again tries them.
+		if got := ta.servers(t); len(got) != 1 || got[0].User != "ada" || got[0].Port != 23456 {
+			t.Errorf("%s: saved %+v", failing, got)
+		}
+		if failing == "home" && len(ta.sessions()) != 2 {
+			t.Errorf("carried on after the home session failed: %q", ta.commands)
+		}
 	}
 }
 
