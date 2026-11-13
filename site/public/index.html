@@ -65,12 +65,15 @@
               <li>creates a non-root user with <code>sudo</code>, and configures a password for it</li>
               <li>moves SSH from 22 to a random port to counter automated attacks</li>
               <li>turns off password-based &amp; root SSH access, and turns on fail2ban</li>
+              <li>turns on the ufw firewall to block all incoming traffic except SSH</li>
             </ul>
           </li>
           <li>
-            <strong>Closes every other port and restarts</strong>
+            <strong>Installs dev tools, adds swap, and restarts</strong>
             <ul>
-              <li>turns on the ufw firewall to block all incoming traffic except SSH</li>
+              <li>installs build-essential, git, curl, unzip, jq, ripgrep, and tmux</li>
+              <li>adds swap as big as the server’s memory (up to 4 GiB), if it has none</li>
+              <li>restarts the server, if an upgrade needs it</li>
             </ul>
           </li>
         </ol>

@@ -75,3 +75,13 @@ install_packages() {
     run "${APT[@]}" install "${missing[@]}"
   fi
 }
+
+# The tools for development every server gets.
+BASIC_PACKAGES=(build-essential git curl unzip jq ripgrep tmux)
+
+# install_basics: installs BASIC_PACKAGES, the ones that aren't installed yet.
+install_basics() {
+  step "Install tools for development: ${BASIC_PACKAGES[*]}"
+  install_packages "${BASIC_PACKAGES[@]}"
+  ok "The tools for development are installed."
+}

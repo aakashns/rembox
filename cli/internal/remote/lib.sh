@@ -27,13 +27,25 @@ step() {
   printf '\n%s-->%s %s%s%s\n' "$CYAN" "$RESET" "$BOLD" "$1" "$RESET"
 }
 
+# quoted WORD...: the words as you'd type them in a shell, each in single
+# quotes if it needs them, as rembox shows its own commands.
+quoted() {
+  local word words=()
+  for word; do
+    if [[ $word =~ ^[A-Za-z0-9_@%+=:,./-]+$ ]]; then
+      words+=("$word")
+    else
+      words+=("'${word//\'/\'\\\'\'}'")
+    fi
+  done
+  printf '%s' "${words[*]}"
+}
+
 # run COMMAND...: shows a command, then runs it with its output indented under
 # it. Of a line that a progress message rewrites with carriage returns, only
 # the last version is kept. Returns the command's exit status.
 run() {
-  local shown
-  shown=$(printf '%q ' "$@")
-  printf '\n    %s$ %s%s\n' "$CYAN" "${shown% }" "$RESET"
+  printf '\n    %s$ %s%s\n' "$CYAN" "$(quoted "$@")" "$RESET"
   local status=0
   "$@" 2>&1 | sed -u "s/\r$//; s/.*\r//; s/^/      ${DIM}/; s/\$/${RESET}/" || status=$?
   return "$status"
@@ -42,9 +54,7 @@ run() {
 # at_terminal COMMAND...: shows a command, then runs it at the terminal, for
 # commands that ask you things, like passwd. Returns its exit status.
 at_terminal() {
-  local shown
-  shown=$(printf '%q ' "$@")
-  printf '\n    %s$ %s%s\n' "$CYAN" "${shown% }" "$RESET"
+  printf '\n    %s$ %s%s\n' "$CYAN" "$(quoted "$@")" "$RESET"
   "$@" </dev/tty >/dev/tty 2>&1
 }
 

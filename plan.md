@@ -1,0 +1,61 @@
+# rembox plan
+
+What `rembox setup` does so far, and what comes next. Keep this current in every PR. To pick up
+where the last agent left off, start at the first unchecked item under **Next**.
+
+The original hand-run version of the whole setup is in `~/workspace/scratch/devbox-setup/`:
+`setup.sh` (one script run as root on the server), `SETUP.md` (what it does, plus design notes
+and gotchas), and `SETUP-MANUAL.md` (the step-by-step log, dead ends included). Port from there,
+but follow this repo's conventions (AGENTS.md, and the style of `cli/internal/remote/*.sh`).
+
+## Done
+
+- [x] Upgrade every package, and turn on daily security updates (unattended-upgrades)
+- [x] Add your user, with sudo that asks for its password and root's SSH keys
+- [x] Move ssh to a random port, with keys only and no root login; fail2ban
+- [x] ufw: block every incoming connection but ssh
+- [x] Restart the server, if an update needs it
+- [x] Base dev packages: build-essential, git, curl, unzip, jq, ripgrep, tmux (`update.sh`)
+- [x] Swap file as big as memory, up to 4 GiB, unless there's swap already; swappiness 10
+      (`swap.sh`). Skipped in containers.
+- [x] Generate the locales your Mac sends over ssh (LANG, LC_*), so programs don't warn
+      (`locale.sh`). The CLI works them out from its environment and passes them to
+      `setup.sh finish`. Not on the site, since it's a small thing.
+
+## Next
+
+1. [ ] **Git and GitHub.** Install `gh` from GitHub's apt repo. Ask for your git name and email
+   (offer `git config --global user.name/email` from this Mac as defaults), set them for your
+   user, run `gh auth login` (device code) and `gh auth setup-git`.
+   - This is the first step that runs as your user, not root. Decide how: probably a third ssh
+     session as your user (no sudo), since rembox can already log in as them after `finish`,
+     rather than `runuser` from the root script. Settle this here, in a small PR.
+2. [ ] **Toolchains, as your user, each optional:** bun; Node via Vite+ (`vp`, with
+   `VP_BUN_MANAGER=no`); Python via uv; Rust via rustup (minimal + clippy + rustfmt).
+3. [ ] **Coding agents, each optional:** Codex, Claude Code, Pi, with their logins. A shared
+   `~/.config/rembox/AGENTS.md` (or similar), symlinked to `~/.codex/AGENTS.md`,
+   `~/.claude/CLAUDE.md` and `~/.pi/agent/AGENTS.md`; never overwrite real files.
+4. [ ] **HTTPS and T3 Code.** Ask for a domain, check its A record points at the server, install
+   Caddy, reverse-proxy to T3 on 127.0.0.1:3773, enable linger so T3's systemd user service runs
+   without a login, add its PATH drop-in, and pair a device (QR code). See SETUP.md's gotchas.
+   - ufw: open 80/tcp, 443/tcp and 443/udp. `setup_firewall` in `firewall.sh` asks "Keep the ufw
+     rule to …?" for every allow rule but ssh's, so make it take the ports rembox opens and skip
+     the question for them, or every re-run asks about Caddy's ports.
+5. [ ] **Shell (optional):** zsh, Powerlevel10k, fzf, Zellij. Maybe a separate command.
+
+## Open questions
+
+- Should `rembox setup` stay about hardening the server, with toolchains, agents and T3 as
+  separate commands (like `rembox install claude`)? That keeps setup's questions and the site's
+  list short. Decide before step 2.
+
+## Testing on real machines
+
+- `make lint test` in `cli/` covers the CLI, and shellchecks the scripts.
+- To run new server steps for real, make throwaway OrbStack machines
+  (`orb create ubuntu:noble NAME`, `orb create debian:bookworm NAME`), run lib.sh, the step
+  files and a small `main` with `orb -m NAME -u root bash -c "$body" bash ARGS`, twice, to check
+  the second run changes nothing, then `orb delete -f NAME`. OrbStack machines are containers,
+  so they skip swap.
+- `~/workspace/scratch/devbox-setup/test/orb-fresh.sh` makes an OrbStack machine that looks
+  like a fresh cloud server (cloud-init, root ssh with a key), for running `rembox setup` itself.
