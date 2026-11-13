@@ -3,7 +3,8 @@
 #
 #   setup.sh start USER PORT LOGIN_PORT
 #     As the user you log in as, on LOGIN_PORT: checks that rembox can set up
-#     the server, installs the latest version of every package, adds USER
+#     the server, installs the latest version of every package, has
+#     unattended-upgrades install security updates every day, adds USER
 #     with your keys, and sets sshd to listen on PORT as well, and ufw, if
 #     it's on, to let it in.
 #
@@ -25,6 +26,7 @@ main() {
     [[ -n ${SUDO_USER:-} ]] || root_login=prohibit-password
     check
     update
+    setup_auto_upgrades
     add_user "$user"
     setup_sshd "$root_login" "$login_port" "$port"
     open_ssh_port "$port"
