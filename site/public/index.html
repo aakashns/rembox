@@ -55,24 +55,48 @@
             <strong>Saves your server details and runs upgrades</strong>
             <ul>
               <li>asks you for the server’s IP/host, SSH port, key file, and username</li>
-              <li>saves it to <code>~/.ssh/config</code>, so you can connect with <code>ssh &lt;name&gt;</code></li>
-              <li>logs in, upgrades all packages, and turns on unattended-upgrades</li>
+              <li>
+                saves it to <a href="https://man.openbsd.org/ssh_config" target="_blank"><code>~/.ssh/config</code></a>, so you can
+                connect with <code>ssh &lt;name&gt;</code>
+              </li>
+              <li>
+                logs in, upgrades all packages, and turns on
+                <a href="https://wiki.debian.org/UnattendedUpgrades" target="_blank">unattended-upgrades</a>
+              </li>
             </ul>
           </li>
           <li>
             <strong>Locks down SSH access</strong>
             <ul>
-              <li>creates a non-root user with <code>sudo</code>, and configures a password for it</li>
-              <li>moves SSH from 22 to a random port to counter automated attacks</li>
-              <li>turns off password-based &amp; root SSH access, and turns on fail2ban</li>
-              <li>turns on the ufw firewall to block all incoming traffic except SSH</li>
+              <li>
+                creates a non-root user with <a href="https://www.sudo.ws/" target="_blank"><code>sudo</code></a>, and configures a
+                password for it
+              </li>
+              <li>moves <a href="https://www.openssh.com/" target="_blank">SSH</a> from 22 to a random port to counter automated attacks</li>
+              <li>
+                turns off password-based &amp; root SSH access, and turns on
+                <a href="https://github.com/fail2ban/fail2ban" target="_blank">fail2ban</a>
+              </li>
+              <li>
+                turns on the <a href="https://help.ubuntu.com/community/UFW" target="_blank">ufw</a> firewall to block all incoming
+                traffic except SSH
+              </li>
             </ul>
           </li>
           <li>
             <strong>Installs dev tools, adds swap, and restarts</strong>
             <ul>
-              <li>installs build-essential, git, curl, unzip, jq, ripgrep, and tmux</li>
-              <li>adds swap as big as the server’s memory (up to 4 GiB), if it has none</li>
+              <li>
+                installs <a href="https://git-scm.com/" target="_blank">git</a>, <a href="https://cli.github.com/" target="_blank">gh</a>,
+                <a href="https://github.com/BurntSushi/ripgrep" target="_blank">ripgrep</a>, <a href="https://github.com/sharkdp/fd" target="_blank">fd</a>,
+                <a href="https://github.com/junegunn/fzf" target="_blank">fzf</a>, <a href="https://jqlang.org/" target="_blank">jq</a>,
+                <a href="https://htop.dev/" target="_blank">htop</a>, <a href="https://github.com/tmux/tmux" target="_blank">tmux</a>,
+                <a href="https://www.zsh.org/" target="_blank">zsh</a>, and other dev tools
+              </li>
+              <li>
+                adds <a href="https://wiki.debian.org/Swap" target="_blank">swap</a> as big as the server’s memory (up to 4 GiB), if it
+                has none
+              </li>
               <li>restarts the server, if an upgrade needs it</li>
             </ul>
           </li>

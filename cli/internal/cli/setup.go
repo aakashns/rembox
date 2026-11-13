@@ -51,8 +51,9 @@ work. Then setup.sh:
      on the new port, over IPv4 and IPv6. It deletes ufw's rules for port 22,
      and asks whether to keep each of its other rules that let something in.
   8. Sets up fail2ban to ban IP addresses that keep failing to log in.
-  9. Installs tools for development: build-essential, git, curl, unzip, jq,
-     ripgrep and tmux.
+  9. Installs tools for development: build-essential, git, gh, curl, wget,
+     zip, unzip, jq, ripgrep, fd (Debian's fd-find, with fd for fdfind),
+     fzf, htop, tmux, zsh, nano, man-db and dnsutils (dig).
  10. Adds a swap file as big as the server's memory, up to 4 GiB, unless it
      has swap already, and has it swap only once memory runs low.
  11. Adds the locale this machine uses, like en_US.UTF-8, which ssh passes on,
