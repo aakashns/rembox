@@ -23,7 +23,7 @@ but follow this repo's conventions (AGENTS.md, and the style of `cli/internal/re
 - [x] Base dev packages (`BASIC_PACKAGES` in `update.sh`): build-essential, git, gh, curl, wget,
       zip, unzip, jq, ripgrep, fd-find (plus an `fd` link to `fdfind`), htop, tmux, zsh, nano,
       man-db, dnsutils, ufw. fzf and zoxide come from their latest GitHub releases instead
-      (`install_release`), as apt's are old. These install in `start`, as `home` needs zsh and git.
+      (`install_release`), as apt's are old. These install in `start`, as zsh's setup needs zsh and git.
 - [x] Swap file as big as memory, up to 4 GiB, unless there's swap already; swappiness 10
       (`swap.sh`). Skipped in containers.
 - [x] Generate the locales your Mac sends over ssh (LANG, LC_*), so programs don't warn
@@ -43,12 +43,11 @@ but follow this repo's conventions (AGENTS.md, and the style of `cli/internal/re
     Ubuntu's /etc/zsh/zshrc runs compinit too early); zprofile sources `~/.profile` (for
     `~/.local/bin`). Later steps that need PATH (bun, uv, cargo) add it to rembox's zprofile and
     run their installers without touching shell files.
-  - **Running as your user:** a third ssh session, `setup.sh home`, as your user on the new port,
-    without sudo, between `start` and `finish` (finish may restart the server, so it stays last).
-    It's a real login (PAM, systemd user bus) at a terminal (`ssh -t`), for device-code logins.
-    Later user steps (git/gh, toolchains, agents) go in it. `finish` makes zsh the login shell, so
-    that happens only once `home` has set it up.
-  - zinit and its plugins download during `home` (`zsh -i -c exit`), unless they're there.
+  - **Running as your user:** `setup.sh finish` logs in as your user on the new port, and sets up
+    zsh before `as_root` runs it again with sudo, so it needs no session of its own. It's a real
+    login (PAM, systemd user bus) at a terminal (`ssh -t`), for device-code logins. Later user
+    steps (git/gh, toolchains, agents) go there too, before `as_root`.
+  - zinit and its plugins download as zsh is set up (`zsh -i -c exit`), unless they're there.
     Re-runs don't update them; `zinit update` does.
   - Later, maybe: Zellij auto-attach (section 7) and Neovim + LazyVim (section 8).
 
@@ -57,7 +56,7 @@ but follow this repo's conventions (AGENTS.md, and the style of `cli/internal/re
 1. [ ] **Git and GitHub.** `gh` comes from the distro now, which lags (2.23 on Debian 12, 2.45
    on Ubuntu 24.04); consider GitHub's apt repo instead. Ask for your git name and email
    (offer `git config --global user.name/email` from this Mac as defaults), set them for your
-   user, run `gh auth login` (device code) and `gh auth setup-git`, in the `home` session.
+   user, run `gh auth login` (device code) and `gh auth setup-git`, as your user in `finish`.
 2. [ ] **Toolchains, as your user, each optional:** bun; Node via Vite+ (`vp`, with
    `VP_BUN_MANAGER=no`); Python via uv; Rust via rustup (minimal + clippy + rustfmt).
 3. [ ] **Coding agents, each optional:** Codex, Claude Code, Pi, with their logins. A shared
@@ -90,5 +89,6 @@ but follow this repo's conventions (AGENTS.md, and the style of `cli/internal/re
   Debian. Run rembox with `HOME` and `XDG_CONFIG_HOME` in a temp folder, so your own config is
   untouched, and `expect` to answer its questions (they're in bold, so match loosely, and set a
   timeout that fails loudly).
-- Steps for your user (`home`) run with `orb -m NAME -u USER`. To try zsh interactively, start
-  `tmux new-session -d 'zsh -l'` on the server, `tmux send-keys`, then `tmux capture-pane -p`.
+- Steps for your user (in `finish`, before `as_root`) run with `orb -m NAME -u USER`. To try zsh
+  interactively, start `tmux new-session -d 'zsh -l'` on the server, `tmux send-keys`, then
+  `tmux capture-pane -p`.

@@ -1,6 +1,6 @@
-# setup.sh: gets the server ready for development. rembox setup runs it three
-# times, in three ssh sessions, as the user it logs in as; start and finish
-# run themselves again with sudo, unless that's root:
+# setup.sh: gets the server ready for development. rembox setup runs it twice,
+# in two ssh sessions, as the user it logs in as; each runs itself again with
+# sudo for what needs root, unless that's root already:
 #
 #   setup.sh start DEFAULT_USER PORT LOGIN_PORT NAME
 #     As root, as the user you log in as, on LOGIN_PORT: checks that rembox
@@ -11,11 +11,9 @@
 #     and sets sshd to listen on PORT as well, and ufw, if it's on, to let it
 #     in. It prints a line telling rembox the name; see add_user.
 #
-#   setup.sh home
-#     As USER, on PORT, which shows that both work: sets up zsh for USER.
-#
 #   setup.sh finish USER PORT [LOCALE...]
-#     As root, as USER: sets sshd to listen only on PORT, with no root login,
+#     As USER, on PORT, which shows that both work: sets up zsh for USER. Then
+#     as root: sets sshd to listen only on PORT, with no root login,
 #     turns on ufw to block every incoming connection but ssh on PORT, sets
 #     up fail2ban, adds swap and the LOCALEs your Mac uses, makes zsh USER's
 #     login shell, then, if an update needs it, asks to restart the server.
@@ -41,12 +39,10 @@ main() {
     setup_sshd "$root_login" "$login_port" "$port"
     open_ssh_port "$port"
     ;;
-  home)
-    (($# == 1)) || fail "Usage: setup.sh home"
-    setup_zsh
-    ;;
   finish)
     (($# >= 3)) || fail "Usage: setup.sh finish USER PORT [LOCALE...]"
+    # As USER first, then again as root, which skips this.
+    [[ -n ${SUDO_USER:-} ]] || setup_zsh
     as_root
     local user=$2 port=$3
     shift 3
@@ -59,7 +55,7 @@ main() {
     restart
     ;;
   *)
-    fail "Usage: setup.sh start DEFAULT_USER PORT LOGIN_PORT NAME, setup.sh home, or setup.sh finish USER PORT [LOCALE...]"
+    fail "Usage: setup.sh start DEFAULT_USER PORT LOGIN_PORT NAME or setup.sh finish USER PORT [LOCALE...]"
     ;;
   esac
 }

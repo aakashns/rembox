@@ -20,7 +20,7 @@ See [rembox.aakashns.com](https://rembox.aakashns.com) for the docs. Until the s
 `rembox setup` sends these to the server over ssh, as one script. In the order they run:
 
 - [`lib.sh`](cli/internal/remote/lib.sh): helpers every script starts with, to show and run each command.
-- [`setup.sh`](cli/internal/remote/setup.sh): runs the steps below, in three ssh sessions: `start`, `home` and `finish`.
+- [`setup.sh`](cli/internal/remote/setup.sh): runs the steps below, in two ssh sessions: `start` and `finish`.
 - [`check.sh`](cli/internal/remote/check.sh): checks the server runs Ubuntu or Debian, on arm64 or amd64.
 - [`hostname.sh`](cli/internal/remote/hostname.sh): makes the server's name in rembox its hostname.
 - [`update.sh`](cli/internal/remote/update.sh): upgrades packages, turns on daily security updates, and installs dev tools (fzf and zoxide from their latest releases).

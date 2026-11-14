@@ -27,7 +27,7 @@ with, and a name for the server (its hostname, by default), and saves it, so
 'rembox list' and 'rembox ssh' know it. It moves ssh to a random port, or
 keeps it where it is if that isn't 22.
 
-Then rembox runs setup.sh on the server, in three ssh sessions. First, as
+Then rembox runs setup.sh on the server, in two ssh sessions. First, as
 root, as the user you log in as, it:
 
   1. Checks that rembox can set up the server: so far, Ubuntu or Debian.
@@ -165,22 +165,15 @@ func runSetup(a *App, args []string) error {
 				oldPort, port, port, s.Name)
 		}
 	}
-	// The rest logs in as your user on the new port, which shows both work:
-	// first without sudo, to set up your shell, then as root.
-	onNewPort := func(err error) error {
-		if cantLogIn(err) {
-			return fmt.Errorf("%w. If %s's cloud provider has a firewall, open port %d/tcp in it, then run rembox setup %s again",
-				err, s.Name, port, s.Name)
-		}
-		return err
-	}
-	a.heading(fmt.Sprintf("Reconnecting to %s as %s, on port %d, to set up your shell", s.Name, s.User, s.Port))
-	if err := onNewPort(a.runScript(s, asUser(s, "bash", "-c"), remote.Setup, a.Stdout, "home")); err != nil {
-		return err
-	}
-	a.heading(fmt.Sprintf("Reconnecting to %s as %s, on port %d, to finish as root", s.Name, s.User, s.Port))
+	// The rest logs in as your user on the new port, which shows both work,
+	// and sets up your shell before setup.sh carries on as root.
+	a.heading(fmt.Sprintf("Reconnecting to %s as %s, on port %d, to set up your shell and finish as root", s.Name, s.User, s.Port))
 	finish := append([]string{"finish", user, strconv.Itoa(port)}, a.Locales...)
-	if err := onNewPort(a.runScript(s, asUser(s, "bash", "-c"), remote.Setup, a.Stdout, finish...)); err != nil {
+	err = a.runScript(s, asUser(s, "bash", "-c"), remote.Setup, a.Stdout, finish...)
+	if cantLogIn(err) {
+		return fmt.Errorf("%w. If %s's cloud provider has a firewall, open port %d/tcp in it, then run rembox setup %s again",
+			err, s.Name, port, s.Name)
+	} else if err != nil {
 		return err
 	}
 	if err := a.offerInclude(); err != nil {
