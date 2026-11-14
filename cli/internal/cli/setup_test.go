@@ -98,7 +98,7 @@ func TestSetup(t *testing.T) {
 	first, home, second := sessions[0], sessions[1], sessions[2]
 	if !slices.Equal(first[:3], []string{"-t", "-p", "22"}) || !slices.Contains(first, "root@203.0.113.10") ||
 		!slices.Contains(first, key) || slices.Contains(first, "sudo") ||
-		!slices.Equal(scriptArgs(first), []string{"start", "ada", "23456", "22"}) {
+		!slices.Equal(scriptArgs(first), []string{"start", "ada", "23456", "22", "box1"}) {
 		t.Errorf("first session's args %q", first)
 	}
 	if !slices.Equal(home[:3], []string{"-t", "-p", "23456"}) || !slices.Contains(home, "ada@203.0.113.10") ||
@@ -109,9 +109,9 @@ func TestSetup(t *testing.T) {
 		slices.Contains(second, "sudo") || !slices.Equal(scriptArgs(second), []string{"finish", "ada", "23456"}) {
 		t.Errorf("last session's args %q", second)
 	}
-	files := `"$(cat lib.sh check.sh update.sh user.sh sshd.sh firewall.sh zsh.sh fail2ban.sh swap.sh locale.sh restart.sh setup.sh)"`
+	files := `"$(cat lib.sh check.sh hostname.sh update.sh user.sh sshd.sh firewall.sh zsh.sh fail2ban.sh swap.sh locale.sh restart.sh setup.sh)"`
 	if !strings.Contains(out, "\n$ ssh -t -p 22 -i "+key+" -o IdentitiesOnly=yes") ||
-		!strings.Contains(out, "root@203.0.113.10 bash -c "+files+" bash start ada 23456 22\n"+
+		!strings.Contains(out, "root@203.0.113.10 bash -c "+files+" bash start ada 23456 22 box1\n"+
 			"  These scripts come with rembox; read them at https://github.com/aakashns/rembox/tree/v0.1.0/cli/internal/remote\n") ||
 		!strings.Contains(out, "ada@203.0.113.10 bash -c "+files+" bash home\n") ||
 		!strings.Contains(out, "ada@203.0.113.10 bash -c "+files+" bash finish ada 23456\n") {
@@ -146,7 +146,7 @@ func TestSetupNotRoot(t *testing.T) {
 	args := ta.sessions()[0]
 	i := slices.Index(args, "-c")
 	if i < 0 || args[0] != "-t" || args[i-2] != "ubuntu@box" || args[i+1] != shellQuote(remote.Setup.Body) ||
-		!slices.Equal(args[i+2:], []string{"bash", "start", "ada", "23456", "22"}) {
+		!slices.Equal(args[i+2:], []string{"bash", "start", "ada", "23456", "22", "box"}) {
 		t.Errorf("ssh args %q", args)
 	}
 }
@@ -158,18 +158,18 @@ func TestSetupAgain(t *testing.T) {
 		t.Fatal(err)
 	}
 	// The saved settings are the defaults; a new address replaces the old.
-	ta.typing("new.example.com", "", "", "")
+	ta.typing("new.example.com", "", "", "", "")
 	ta.mustRun(t, "setup", "box")
 	out := ta.stdout.String()
 	for _, want := range []string{"Server IP address or hostname [default: old.example.com]:", "SSH port [default: 2222]:",
 		"User to log in as [default: ada]:", "SSH private key [default: ~/.ssh/id_ed25519]:",
-		"Saved box (ada@new.example.com, port 2222)"} {
+		"Name for this server [default: box]:", "Saved box (ada@new.example.com, port 2222)"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("output missing %q:\n%s", want, out)
 		}
 	}
-	if strings.Contains(out, "Name for this server") {
-		t.Errorf("asked for the name it was given:\n%s", out)
+	if strings.Contains(out, "Replace it?") || strings.Contains(out, "Removed") {
+		t.Errorf("treated keeping the name as a rename:\n%s", out)
 	}
 	if strings.Contains(out, "Move ssh") {
 		t.Errorf("asked to move ssh to the port it's on:\n%s", out)
@@ -178,7 +178,7 @@ func TestSetupAgain(t *testing.T) {
 	if got := ta.servers(t); !slices.Equal(got, want) {
 		t.Errorf("saved %+v, want %+v", got, want)
 	}
-	if s := ta.sessions(); len(s) != 3 || !slices.Equal(scriptArgs(s[0]), []string{"start", "ada", "2222", "2222"}) {
+	if s := ta.sessions(); len(s) != 3 || !slices.Equal(scriptArgs(s[0]), []string{"start", "ada", "2222", "2222", "box"}) {
 		t.Errorf("sessions %q", s)
 	}
 }
@@ -191,7 +191,7 @@ func TestSetupLocales(t *testing.T) {
 	ta.mustRun(t, "setup")
 	// Only the last session adds them.
 	s := ta.sessions()
-	if len(s) != 3 || !slices.Equal(scriptArgs(s[0]), []string{"start", "ada", "23456", "22"}) ||
+	if len(s) != 3 || !slices.Equal(scriptArgs(s[0]), []string{"start", "ada", "23456", "22", "box1"}) ||
 		!slices.Equal(scriptArgs(s[2]), []string{"finish", "ada", "23456", "en_IN.UTF-8", "en_US.UTF-8"}) {
 		t.Errorf("sessions %q", s)
 	}
@@ -212,6 +212,33 @@ func TestSentLocales(t *testing.T) {
 	}
 }
 
+func TestSetupRename(t *testing.T) {
+	ta := newTestApp(t, "0.1.0")
+	key := ta.withKey(t, "id_ed25519")
+	if err := config.SaveServer(ta.configDir, config.Server{Name: "box", Host: "box.example.com", Port: 2222, User: "ada", Key: key}); err != nil {
+		t.Fatal(err)
+	}
+	ta.typing("", "", "", "", "devbox")
+	ta.mustRun(t, "setup", "box")
+	want := []config.Server{{Name: "devbox", Host: "box.example.com", Port: 2222, User: "ada", Key: key}}
+	if got := ta.servers(t); !slices.Equal(got, want) {
+		t.Errorf("saved %+v, want %+v", got, want)
+	}
+	if out := ta.stdout.String(); !strings.Contains(out, "Removed box, now that it's called something else.") ||
+		!strings.Contains(out, "==> Connecting to devbox as ada, on port 2222") ||
+		!strings.Contains(out, "==> Reconnecting to devbox as ada, on port 2222, to set up your shell") ||
+		!strings.Contains(out, "==> Reconnecting to devbox as ada, on port 2222, to finish as root") {
+		t.Errorf("output:\n%s", out)
+	}
+	if c := readFile(t, filepath.Join(ta.configDir, "ssh_config")); !strings.Contains(c, "Host devbox") || strings.Contains(c, "Host box ") || strings.Contains(c, "Host box\n") {
+		t.Errorf("ssh_config:\n%s", c)
+	}
+	// setup.sh makes the new name the server's hostname.
+	if s := ta.sessions(); len(s) != 3 || !slices.Equal(scriptArgs(s[0]), []string{"start", "ada", "2222", "2222", "devbox"}) {
+		t.Errorf("sessions %q", s)
+	}
+}
+
 func TestSetupOldServer(t *testing.T) {
 	ta := newTestApp(t, "0.1.0")
 	key := ta.withKey(t, "id_ed25519")
@@ -223,10 +250,10 @@ func TestSetupOldServer(t *testing.T) {
 	if err := os.WriteFile(path, []byte(`{"host": "box", "user": "root", "key": "`+key+`"}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	ta.typing("", "", "", "", "y")
+	ta.typing("", "", "", "", "", "y")
 	ta.mustRun(t, "setup", "box")
 	if !strings.Contains(ta.stdout.String(), "SSH port [default: 22]:") ||
-		!slices.Equal(scriptArgs(ta.sessions()[0]), []string{"start", "ada", "23456", "22"}) {
+		!slices.Equal(scriptArgs(ta.sessions()[0]), []string{"start", "ada", "23456", "22", "box"}) {
 		t.Errorf("output:\n%s", ta.stdout)
 	}
 }
@@ -397,7 +424,7 @@ func TestSetupAsksAgain(t *testing.T) {
 		}
 	}
 	if got := ta.servers(t); len(got) != 1 || got[0].Name != "box" || got[0].User != "ada" || got[0].Port != 2222 ||
-		got[0].Key != key || !slices.Equal(scriptArgs(ta.sessions()[0]), []string{"start", "ada", "2222", "2222"}) ||
+		got[0].Key != key || !slices.Equal(scriptArgs(ta.sessions()[0]), []string{"start", "ada", "2222", "2222", "box"}) ||
 		ta.sessions()[0][2] != "2222" {
 		t.Errorf("saved %+v", got)
 	}

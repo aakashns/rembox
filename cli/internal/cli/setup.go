@@ -31,18 +31,20 @@ Then rembox runs setup.sh on the server, in three ssh sessions. First, as
 root, as the user you log in as, it:
 
   1. Checks that rembox can set up the server: so far, Ubuntu or Debian.
-  2. Installs the latest version of every package with apt.
-  3. Has unattended-upgrades install security updates every day. It doesn't
+  2. Makes the server's name its hostname, if it can be one, and keeps
+     cloud-init from changing it back.
+  3. Installs the latest version of every package with apt.
+  4. Has unattended-upgrades install security updates every day. It doesn't
      restart the server for them; setup asks to, the next time you run it.
-  4. Installs tools for development: build-essential, git, gh, curl, wget,
+  5. Installs tools for development: build-essential, git, gh, curl, wget,
      zip, unzip, jq, ripgrep, fd, htop, tmux, zsh, nano, man-db and dig, and
      fzf and zoxide from their latest releases on GitHub, as apt's are old.
-  5. Asks for your user's name (your username on this machine, by default),
+  6. Asks for your user's name (your username on this machine, by default),
      and adds it, if it isn't there yet, with sudo and the SSH keys of the
      user you log in as, and asks you for a password for it, if it has none.
      sudo asks for it, so programs running as your user, like coding agents,
      can't run commands as root without you.
-  6. Sets sshd to listen on the new port too, and let in only keys, and ufw,
+  7. Sets sshd to listen on the new port too, and let in only keys, and ufw,
      if it's on, to let in the new port.
 
 rembox then saves the server with your user and the new port, and asks you to
@@ -50,23 +52,24 @@ open the port in your cloud provider's firewall, if it has one, before it
 moves ssh there. It logs in as your user on the new port, which shows both
 work, and setup.sh, as your user:
 
-  7. Sets up zsh: autosuggestions, syntax highlighting, fzf, zoxide's z, and
-     a prompt with the git branch and status. rembox's config is in
-     ~/.config/rembox; yours goes in ~/.zshrc, and wins.
+  8. Sets up zsh: autosuggestions, syntax highlighting, fzf, zoxide's z, and
+     a prompt with you@server, the folder, and the git branch and status.
+     rembox's config is in ~/.config/rembox; yours goes in ~/.zshrc, and
+     wins.
 
 Then, as root:
 
-  8. Sets sshd to listen only on the new port, with no root login.
-  9. Turns on ufw, the firewall, to block every incoming connection but ssh
+  9. Sets sshd to listen only on the new port, with no root login.
+ 10. Turns on ufw, the firewall, to block every incoming connection but ssh
      on the new port, over IPv4 and IPv6. It deletes ufw's rules for port 22,
      and asks whether to keep each of its other rules that let something in.
- 10. Sets up fail2ban to ban IP addresses that keep failing to log in.
- 11. Adds a swap file as big as the server's memory, up to 4 GiB, unless it
+ 11. Sets up fail2ban to ban IP addresses that keep failing to log in.
+ 12. Adds a swap file as big as the server's memory, up to 4 GiB, unless it
      has swap already, and has it swap only once memory runs low.
- 12. Adds the locale this machine uses, like en_US.UTF-8, which ssh passes on,
+ 13. Adds the locale this machine uses, like en_US.UTF-8, which ssh passes on,
      so programs on the server don't warn that they can't use it.
- 13. Makes zsh your user's login shell.
- 14. Asks to restart the server, if an update needs it.
+ 14. Makes zsh your user's login shell.
+ 15. Asks to restart the server, if an update needs it.
 
 To reach a program on the server, like a dev server or database, forward its
 port over ssh: 'ssh -L 3000:localhost:3000 NAME' makes localhost:3000 on this
@@ -83,7 +86,7 @@ the server is set up, it asks to include that at the top of ~/.ssh/config, so
 user, as rembox does.
 
 Give the NAME of a server you've added to set it up again: its address, port,
-user and key are the defaults, and any you change replace them. Run it any
+user, key and name are the defaults, and any you change replace them. Run it any
 time, as often as you like: setup.sh looks at the server as it is now and
 changes only what needs changing. rembox doesn't keep anything about the
 server but how to log in to it.
@@ -126,12 +129,18 @@ func runSetup(a *App, args []string) error {
 	if err := a.saveServer(s); err != nil {
 		return err
 	}
+	if saved != nil && saved.Name != s.Name {
+		if err := a.removeServer(saved.Name); err != nil {
+			return err
+		}
+	}
 
 	// Each session does all it can, so ssh and sudo ask for a password at
 	// most once each. The first asks for your user's name, just before adding
 	// it, and tells rembox.
 	out := &userWriter{w: a.Stdout}
-	err = a.runScript(s, asUser(s, "bash", "-c"), remote.Setup, out, "start", userDefault(a.Username), strconv.Itoa(port), strconv.Itoa(s.Port))
+	a.heading(fmt.Sprintf("Connecting to %s as %s, on port %d", s.Name, s.User, s.Port))
+	err = a.runScript(s, asUser(s, "bash", "-c"), remote.Setup, out, "start", userDefault(a.Username), strconv.Itoa(port), strconv.Itoa(s.Port), s.Name)
 	out.flush()
 	if cantLogIn(err) {
 		return fmt.Errorf("%w. To change the address, port, user or key: rembox setup %s", err, s.Name)
@@ -165,9 +174,11 @@ func runSetup(a *App, args []string) error {
 		}
 		return err
 	}
+	a.heading(fmt.Sprintf("Reconnecting to %s as %s, on port %d, to set up your shell", s.Name, s.User, s.Port))
 	if err := onNewPort(a.runScript(s, asUser(s, "bash", "-c"), remote.Setup, a.Stdout, "home")); err != nil {
 		return err
 	}
+	a.heading(fmt.Sprintf("Reconnecting to %s as %s, on port %d, to finish as root", s.Name, s.User, s.Port))
 	finish := append([]string{"finish", user, strconv.Itoa(port)}, a.Locales...)
 	if err := onNewPort(a.runScript(s, asUser(s, "bash", "-c"), remote.Setup, a.Stdout, finish...)); err != nil {
 		return err
@@ -269,6 +280,19 @@ func (a *App) saveServer(s config.Server) error {
 	return nil
 }
 
+// removeServer removes the saved server called name, and says so.
+func (a *App) removeServer(name string) error {
+	dir, err := a.ConfigDir()
+	if err != nil {
+		return err
+	}
+	if err := config.RemoveServer(dir, name); err != nil {
+		return fmt.Errorf("removing %s: %w", name, err)
+	}
+	a.done(fmt.Sprintf("Removed %s, now that it's called something else.", name))
+	return nil
+}
+
 // offerInclude asks to include rembox's ssh config at the top of
 // ~/.ssh/config, unless it is already, and adds it if you say yes.
 func (a *App) offerInclude() error {
@@ -343,19 +367,22 @@ func (a *App) askServer(saved *config.Server) (config.Server, error) {
 	if err != nil {
 		return s, err
 	}
+	current := ""
 	if saved != nil {
-		s.Name = saved.Name
-	} else if s.Name, err = a.askName(dir, home, s); err != nil {
+		current = saved.Name
+	}
+	if s.Name, err = a.askName(dir, home, s, current); err != nil {
 		return s, err
 	}
 	return s, nil
 }
 
-// askName asks for a name for s, offering its hostname, and asks before
-// replacing another server with that name.
-func (a *App) askName(dir, home string, s config.Server) (string, error) {
-	def := ""
-	if net.ParseIP(s.Host) == nil && config.CheckName(strings.ToLower(s.Host)) == nil {
+// askName asks for a name for s, offering current, the name of the server
+// being set up again, if any, or else its hostname. It asks before replacing
+// another server with that name.
+func (a *App) askName(dir, home string, s config.Server, current string) (string, error) {
+	def := current
+	if def == "" && net.ParseIP(s.Host) == nil && config.CheckName(strings.ToLower(s.Host)) == nil {
 		def = strings.ToLower(s.Host)
 	}
 	for {
@@ -364,6 +391,9 @@ func (a *App) askName(dir, home string, s config.Server) (string, error) {
 		})
 		if err != nil {
 			return "", err
+		}
+		if name == current {
+			return name, nil
 		}
 		s.Name = name
 		saved, err := config.LoadServer(dir, name)

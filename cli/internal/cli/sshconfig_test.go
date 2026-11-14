@@ -57,7 +57,7 @@ func TestSetupSSHConfig(t *testing.T) {
 
 	// Once it's there, setup doesn't ask again.
 	ta.stdout.Reset()
-	ta.typing("", "", "", "")
+	ta.typing("", "", "", "", "")
 	ta.mustRun(t, "setup", "box")
 	if strings.Contains(ta.stdout.String(), "~/.ssh/config") {
 		t.Errorf("asked again:\n%s", ta.stdout)

@@ -152,6 +152,12 @@ func (a *App) done(msg string) {
 	fmt.Fprintf(a.Stdout, "\n%s %s\n", a.paint(green, "✓"), msg)
 }
 
+// heading says what rembox does next, like logging in to a server, so the
+// questions that follow, like ssh's, make sense.
+func (a *App) heading(msg string) {
+	fmt.Fprintf(a.Stdout, "\n\n%s %s\n", a.paint(cyan, "==>"), a.paint(bold, msg))
+}
+
 // note says something worth knowing that isn't a problem, or a problem
 // rembox carries on after.
 func (a *App) note(msg string) {

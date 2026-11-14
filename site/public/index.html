@@ -59,6 +59,7 @@
                 saves it to <a href="https://man.openbsd.org/ssh_config" target="_blank"><code>~/.ssh/config</code></a>, so you can
                 connect with <code>ssh &lt;name&gt;</code>
               </li>
+              <li>makes that name the server’s hostname</li>
               <li>
                 logs in, upgrades all packages, and turns on
                 <a href="https://wiki.debian.org/UnattendedUpgrades" target="_blank">unattended-upgrades</a>
@@ -95,7 +96,7 @@
               </li>
               <li>
                 makes <a href="https://www.zsh.org/" target="_blank">zsh</a> your shell, with autosuggestions, syntax highlighting,
-                <a href="https://github.com/ajeetdsouza/zoxide" target="_blank">zoxide</a>, and a prompt showing git status
+                <a href="https://github.com/ajeetdsouza/zoxide" target="_blank">zoxide</a>, and a prompt showing user@host and git status
               </li>
               <li>
                 adds <a href="https://wiki.debian.org/Swap" target="_blank">swap</a> as big as the server’s memory (up to 4 GiB), if it

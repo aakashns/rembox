@@ -2,9 +2,9 @@
 # times, in three ssh sessions, as the user it logs in as; start and finish
 # run themselves again with sudo, unless that's root:
 #
-#   setup.sh start DEFAULT_USER PORT LOGIN_PORT
+#   setup.sh start DEFAULT_USER PORT LOGIN_PORT NAME
 #     As root, as the user you log in as, on LOGIN_PORT: checks that rembox
-#     can set up the server, installs the latest version of every package,
+#     can set up the server, makes NAME its hostname, installs the latest version of every package,
 #     has unattended-upgrades install security updates every day, installs
 #     tools for development, asks for your user's name (DEFAULT_USER, if you
 #     don't give one; DEFAULT_USER may be empty) and adds it with your keys,
@@ -26,13 +26,14 @@ main() {
   logged_in
   case ${1:-} in
   start)
-    (($# == 4)) || fail "Usage: setup.sh start DEFAULT_USER PORT LOGIN_PORT"
+    (($# == 5)) || fail "Usage: setup.sh start DEFAULT_USER PORT LOGIN_PORT NAME"
     as_root
-    local default_user=$2 port=$3 login_port=$4
+    local default_user=$2 port=$3 login_port=$4 name=$5
     # rembox logs in as root until it can log in as USER.
     local root_login=no
     [[ -n ${SUDO_USER:-} ]] || root_login=prohibit-password
     check
+    set_hostname "$name"
     update
     setup_auto_upgrades
     install_basics
@@ -58,7 +59,7 @@ main() {
     restart
     ;;
   *)
-    fail "Usage: setup.sh start DEFAULT_USER PORT LOGIN_PORT, setup.sh home, or setup.sh finish USER PORT [LOCALE...]"
+    fail "Usage: setup.sh start DEFAULT_USER PORT LOGIN_PORT NAME, setup.sh home, or setup.sh finish USER PORT [LOCALE...]"
     ;;
   esac
 }

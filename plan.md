@@ -14,6 +14,9 @@ but follow this repo's conventions (AGENTS.md, and the style of `cli/internal/re
 - [x] Add your user, with sudo that asks for its password and root's SSH keys. The server asks
       for its name just before adding it; `userWriter` in `setup.go` reads it back.
 - [x] Each session says it has logged in, and why it needs sudo before sudo asks (`as_root`).
+- [x] The CLI says when it connects and reconnects, before ssh asks for a passphrase.
+- [x] `rembox setup NAME` asks for the name too, and renames the server if it changes.
+- [x] The server's name is its hostname (`hostname.sh`), and the prompt shows `user@host`.
 - [x] Move ssh to a random port, with keys only and no root login; fail2ban
 - [x] ufw: block every incoming connection but ssh
 - [x] Restart the server, if an update needs it
