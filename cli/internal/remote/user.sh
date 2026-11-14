@@ -1,11 +1,21 @@
 # user.sh: adds your user on the server.
 
-# add_user USER: adds USER, if it isn't there yet, with a password for sudo,
-# and lets in the SSH keys of the user rembox logged in as.
+# add_user DEFAULT: asks for your user's name, DEFAULT if you don't give one,
+# and tells rembox. Adds the user, if it isn't there yet, with a password for
+# sudo, and lets in the SSH keys of the user rembox logged in as.
 add_user() {
-  local user=$1 login=${SUDO_USER:-root}
+  local user problem login=${SUDO_USER:-root}
 
-  step "Add your user, $user, with sudo"
+  step "Add a user for you, with sudo, which rembox logs in as from now on"
+  while true; do
+    ask user "Username" "$1" || fail "Cancelled."
+    problem=$(user_problem "$user") || break
+    warn "$problem"
+  done
+  # A line rembox takes out of the output, to learn the name: an escape
+  # sequence, which terminals ignore. See userMarker in setup.go.
+  printf '\e]rembox;user=%s\a\n' "$user"
+
   if id -u "$user" >/dev/null 2>&1; then
     ok "$user is already there."
   else
@@ -59,5 +69,20 @@ add_user() {
     run chown "$user:$group" "$home/.ssh" "$keys"
     run chmod 700 "$home/.ssh"
     run chmod 600 "$keys"
+  fi
+}
+
+# user_problem USER: says what's wrong with USER as your user's name, as
+# Debian and Ubuntu's useradd takes it, and fails if nothing is.
+user_problem() {
+  local pattern='^[a-z_][a-z0-9_-]{0,31}$'
+  if [[ -z $1 ]]; then
+    echo "Enter a name for your user."
+  elif [[ $1 == root ]]; then
+    echo "Pick a user other than root; rembox turns off logging in as root."
+  elif [[ ! $1 =~ $pattern ]]; then
+    echo "$1 can't be a user on the server; use lowercase letters, digits, - and _, starting with a letter."
+  else
+    return 1
   fi
 }

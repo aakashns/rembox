@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"io/fs"
 	"net"
 	"os"
@@ -23,9 +24,8 @@ const setupHelp = `Usage: rembox setup [NAME]
 Get a server ready for development, securely. rembox asks which server, the
 port and user to log in with (22 and root, by default), the SSH key to log in
 with, and a name for the server (its hostname, by default), and saves it, so
-'rembox list' and 'rembox ssh' know it. Then it asks for your user on the
-server (your username on this machine, by default). It moves ssh to a random
-port, or keeps it where it is if that isn't 22.
+'rembox list' and 'rembox ssh' know it. It moves ssh to a random port, or
+keeps it where it is if that isn't 22.
 
 Then rembox runs setup.sh on the server, in three ssh sessions. First, as
 root, as the user you log in as, it:
@@ -36,8 +36,9 @@ root, as the user you log in as, it:
      restart the server for them; setup asks to, the next time you run it.
   4. Installs tools for development: build-essential, git, gh, curl, wget,
      zip, unzip, jq, ripgrep, fd, htop, tmux, zsh, nano, man-db and dig, and
-     fzf and zoxide from their own releases, as apt's are old.
-  5. Adds your user, if it isn't there yet, with sudo and the SSH keys of the
+     fzf and zoxide from their latest releases on GitHub, as apt's are old.
+  5. Asks for your user's name (your username on this machine, by default),
+     and adds it, if it isn't there yet, with sudo and the SSH keys of the
      user you log in as, and asks you for a password for it, if it has none.
      sudo asks for it, so programs running as your user, like coding agents,
      can't run commands as root without you.
@@ -87,8 +88,9 @@ time, as often as you like: setup.sh looks at the server as it is now and
 changes only what needs changing. rembox doesn't keep anything about the
 server but how to log in to it.
 
-Unless rembox logs in as root, it runs setup.sh with sudo, which may ask for
-the user's password on the server: always, once it logs in as your user.
+Unless rembox logs in as root, setup.sh says so, then runs itself with sudo,
+which may ask for the user's password on the server: always, once it logs in
+as your user.
 `
 
 // defaultKeys are the private keys setup offers, in order of preference.
@@ -116,10 +118,6 @@ func runSetup(a *App, args []string) error {
 	if err != nil {
 		return err
 	}
-	user, err := a.answer("Your user on the server", userDefault(a.Username), checkYourUser)
-	if err != nil {
-		return err
-	}
 	// Keep ssh on the port it's on, unless that's 22.
 	port := s.Port
 	if port == config.DefaultPort {
@@ -130,12 +128,19 @@ func runSetup(a *App, args []string) error {
 	}
 
 	// Each session does all it can, so ssh and sudo ask for a password at
-	// most once each.
-	err = a.runScript(s, asRoot(s, "bash", "-c"), remote.Setup, a.Stdout, "start", user, strconv.Itoa(port), strconv.Itoa(s.Port))
+	// most once each. The first asks for your user's name, just before adding
+	// it, and tells rembox.
+	out := &userWriter{w: a.Stdout}
+	err = a.runScript(s, asUser(s, "bash", "-c"), remote.Setup, out, "start", userDefault(a.Username), strconv.Itoa(port), strconv.Itoa(s.Port))
+	out.flush()
 	if cantLogIn(err) {
 		return fmt.Errorf("%w. To change the address, port, user or key: rembox setup %s", err, s.Name)
 	} else if err != nil {
 		return err
+	}
+	user, err := checkYourUser(out.user)
+	if err != nil {
+		return fmt.Errorf("setup.sh didn't say which user it added on %s (%w)", s.Name, err)
 	}
 
 	// Saved before asking, so if you stop here, setup keeps this port next time.
@@ -164,7 +169,7 @@ func runSetup(a *App, args []string) error {
 		return err
 	}
 	finish := append([]string{"finish", user, strconv.Itoa(port)}, a.Locales...)
-	if err := onNewPort(a.runScript(s, asRoot(s, "bash", "-c"), remote.Setup, a.Stdout, finish...)); err != nil {
+	if err := onNewPort(a.runScript(s, asUser(s, "bash", "-c"), remote.Setup, a.Stdout, finish...)); err != nil {
 		return err
 	}
 	if err := a.offerInclude(); err != nil {
@@ -173,6 +178,59 @@ func runSetup(a *App, args []string) error {
 	fmt.Fprintf(a.Stdout, "\n\n%s %s\n", a.paint(green, "==>"),
 		a.paint(bold, fmt.Sprintf("%s is set up. To log in: rembox ssh %s", s.Name, s.Name)))
 	return nil
+}
+
+// userMarker starts the line in which setup.sh tells rembox the name of your
+// user, after asking you for it, as "\x1b]rembox;user=NAME\a": an escape
+// sequence, which terminals ignore. See add_user in user.sh.
+const userMarker = "\x1b]rembox;user="
+
+// userWriter passes what setup.sh prints on to w, but for the line starting
+// with userMarker, from which it keeps the user's name. The rest passes
+// straight through, so questions, which don't end their lines, show at once.
+type userWriter struct {
+	w       io.Writer
+	user    string
+	held    []byte // the start of a line that may be the marker's
+	midLine bool
+}
+
+func (u *userWriter) Write(p []byte) (int, error) {
+	out := make([]byte, 0, len(p))
+	for _, b := range p {
+		switch {
+		case u.held != nil:
+			u.held = append(u.held, b)
+			if n := len(u.held); n <= len(userMarker) && b != userMarker[n-1] {
+				out = append(out, u.held...) // not the marker after all
+				u.held = nil
+			} else if b == '\n' {
+				// The terminal ends lines with \r\n.
+				line := strings.TrimRight(string(u.held[len(userMarker):]), "\r\n")
+				u.user = strings.TrimSuffix(line, "\a")
+				u.held = nil
+			}
+		case !u.midLine && b == userMarker[0]:
+			u.held = []byte{b}
+		default:
+			out = append(out, b)
+		}
+		u.midLine = b != '\n'
+	}
+	if len(out) > 0 {
+		if _, err := u.w.Write(out); err != nil {
+			return 0, err
+		}
+	}
+	return len(p), nil
+}
+
+// flush passes on what's held back, once the output has ended.
+func (u *userWriter) flush() {
+	if len(u.held) > 0 {
+		u.w.Write(u.held)
+		u.held = nil
+	}
 }
 
 // localePattern is a UTF-8 locale, as your Mac or a Linux machine names it,

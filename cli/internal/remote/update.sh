@@ -93,45 +93,41 @@ install_basics() {
   if ! command -v fd >/dev/null && [[ -x /usr/bin/fdfind ]]; then
     run ln -s /usr/bin/fdfind /usr/local/bin/fd
   fi
-  local arch
+  local arch target=x86_64
   arch=$(dpkg --print-architecture)
-  install_release fzf "$FZF_VERSION" "${FZF_SHA256[$arch]}" \
-    "https://github.com/junegunn/fzf/releases/download/v$FZF_VERSION/fzf-$FZF_VERSION-linux_$arch.tar.gz"
-  local target=x86_64
   [[ $arch == arm64 ]] && target=aarch64
-  install_release zoxide "$ZOXIDE_VERSION" "${ZOXIDE_SHA256[$arch]}" \
-    "https://github.com/ajeetdsouza/zoxide/releases/download/v$ZOXIDE_VERSION/zoxide-$ZOXIDE_VERSION-$target-unknown-linux-musl.tar.gz"
+  install_release fzf junegunn/fzf "fzf-VERSION-linux_$arch.tar.gz"
+  install_release zoxide ajeetdsouza/zoxide "zoxide-VERSION-$target-unknown-linux-musl.tar.gz"
   ok "The tools for development are installed."
 }
 
-# The releases of fzf and zoxide rembox installs, and the SHA-256 of their
-# builds for each processor, as their releases list them.
-FZF_VERSION=0.75.0
-declare -A FZF_SHA256=(
-  [amd64]=0d6640f83582d991cf429754baad64b07e3a4e439a6019670f4b91da1314141c
-  [arm64]=bd0717badb6a5620387e014bb94209aac4d9eab6ab77b5348eabb0833aeb4d59
-)
-ZOXIDE_VERSION=0.10.0
-declare -A ZOXIDE_SHA256=(
-  [amd64]=2d93385b99f3e82cf2701609a1bffcad863fbeb75aa3fe7eb6be4d29be68b1ae
-  [arm64]=f1f16c5d6298d63dee467eedea1cdcd8490e43e493bea43acd416dc9033ef641
-)
-
-# install_release NAME VERSION SHA256 URL: installs the program NAME from the
-# .tar.gz at URL, if its SHA-256 is SHA256, as /usr/local/bin/NAME, which
-# comes before apt's on PATH, unless that's VERSION or newer already.
+# install_release NAME REPO FILE: installs the program NAME from the latest
+# release of the GitHub repo REPO, as /usr/local/bin/NAME, which comes before
+# apt's on PATH, unless that's the latest already. FILE is the release's
+# .tar.gz for this server, with VERSION for the version. The download must
+# match the SHA-256 GitHub lists for it.
 install_release() {
-  local name=$1 version=$2 sha256=$3 url=$4 file=/usr/local/bin/$1 have
+  local name=$1 repo=$2 file=/usr/local/bin/$1 release version url sha256 have
+  if ! release=$(curl -fsSL "https://api.github.com/repos/$repo/releases/latest"); then
+    warn "Couldn't find $name's latest release on GitHub, so it's not installed or updated. Run rembox setup again later."
+    return
+  fi
+  version=$(jq -r '.tag_name | ltrimstr("v")' <<<"$release")
   have=$("$file" --version 2>/dev/null | grep -oE '[0-9]+(\.[0-9]+)+' | head -n 1 || true)
   if [[ -n $have && $(printf '%s\n' "$version" "$have" | sort -V | head -n 1) == "$version" ]]; then
     return
   fi
+  local asset=${3//VERSION/$version}
+  url=$(jq -r --arg name "$asset" '.assets[] | select(.name == $name) | .browser_download_url' <<<"$release")
+  sha256=$(jq -r --arg name "$asset" '.assets[] | select(.name == $name) | .digest // "" | ltrimstr("sha256:")' <<<"$release")
+  [[ -n $url && -n $sha256 ]] ||
+    fail "$name's latest release, $version, has no $asset with a SHA-256, so it's not installed."
   local dir
   dir=$(mktemp -d)
   run curl -fsSL -o "$dir/$name.tar.gz" "$url"
   if ! run sha256sum --check --strict <<<"$sha256  $dir/$name.tar.gz"; then
     rm -rf "$dir"
-    fail "The download of $name isn't the file rembox expects, so it's not installed."
+    fail "The download of $name isn't the file GitHub lists, so it's not installed."
   fi
   run tar -xzf "$dir/$name.tar.gz" -C "$dir" "$name"
   run install -m 755 "$dir/$name" "$file"

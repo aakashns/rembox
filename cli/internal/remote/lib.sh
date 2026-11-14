@@ -3,7 +3,7 @@
 # the server, as one script.
 #
 # Each script defines main and ends with `main "$@" </dev/null`, so no command
-# in it stops to read input; only confirm asks, at the terminal.
+# in it stops to read input; only confirm and ask ask, at the terminal.
 #
 # rembox passes --color when your terminal shows color.
 
@@ -14,6 +14,9 @@ set -euo pipefail
 # also asks ssh for this locale, but servers can refuse it.
 export LC_ALL=C.UTF-8 LANG=C.UTF-8
 unset LANGUAGE
+
+# The script's arguments, as rembox gave them, for as_root.
+SCRIPT_ARGS=("$@")
 
 if [[ ${1:-} == --color ]]; then
   shift
@@ -68,6 +71,11 @@ ok() {
   printf '\n    %s✓%s %s\n' "$GREEN" "$RESET" "$1"
 }
 
+# info MESSAGE: says what the script does next, and why.
+info() {
+  printf '\n    %s\n' "$1"
+}
+
 # warn MESSAGE: says something went wrong that the script can carry on after.
 warn() {
   printf '\n    %s! %s%s\n' "$YELLOW" "$1" "$RESET"
@@ -83,6 +91,22 @@ fail() {
   exit 1
 }
 
+# logged_in: says rembox has logged in to the server, unless as_root has run
+# the script again.
+logged_in() {
+  [[ -n ${SUDO_USER:-} ]] || step "Logged in to $HOSTNAME as $(id -un)"
+}
+
+# as_root: carries on as root. Unless the script runs as root already, it
+# says so, then runs itself again with sudo, which may ask for the password.
+as_root() {
+  ((EUID != 0)) || return 0
+  local me
+  me=$(id -un)
+  info "$me isn't root, so rembox carries on with sudo, which may ask for $me's password on $HOSTNAME."
+  exec sudo bash -c "$BASH_EXECUTION_STRING" bash "${SCRIPT_ARGS[@]}"
+}
+
 # confirm QUESTION [yes]: asks a yes/no question at the terminal, which rembox
 # runs the script at (ssh -t). Succeeds if the answer is y or yes, or, given
 # yes, if there's no answer.
@@ -93,6 +117,20 @@ confirm() {
   read -r answer </dev/tty || true
   answer=${answer,,}
   [[ ${answer:-$default} == y || ${answer:-$default} == yes ]]
+}
+
+# ask VAR QUESTION [DEFAULT]: asks QUESTION at the terminal, as rembox asks
+# its own, and sets VAR to the answer, or DEFAULT if there's none. Fails at the
+# end of input (Ctrl-D).
+ask() {
+  local answer='' hint=''
+  [[ -n ${3:-} ]] && hint=" ${DIM}[default: $3]${RESET}"
+  printf '\n    %s%s%s%s: ' "$BOLD" "$2" "$RESET" "$hint"
+  if ! read -r answer </dev/tty; then
+    printf '\n'
+    return 1
+  fi
+  printf -v "$1" '%s' "${answer:-${3:-}}"
 }
 
 # same FILE CONTENT: succeeds if FILE holds just CONTENT (and a newline).

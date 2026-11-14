@@ -393,7 +393,7 @@ func (a *App) confirm(question string, def bool) bool {
 // answered.
 func (a *App) ask(question, def string) (string, error) {
 	if def != "" {
-		fmt.Fprintf(a.Stdout, "%s [%s]: ", a.paint(bold, question), def)
+		fmt.Fprintf(a.Stdout, "%s %s: ", a.paint(bold, question), a.paint(dim, "[default: "+def+"]"))
 	} else {
 		fmt.Fprintf(a.Stdout, "%s: ", a.paint(bold, question))
 	}

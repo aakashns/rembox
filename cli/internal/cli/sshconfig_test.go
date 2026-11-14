@@ -25,7 +25,7 @@ func TestSetupSSHConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ta.typing("203.0.113.10", "", "", "", "box", "", "y", "y")
+	ta.typing("203.0.113.10", "", "", "", "box", "y", "y")
 	ta.mustRun(t, "setup")
 	out := ta.stdout.String()
 	include := "Include ~/.config/rembox/ssh_config"
@@ -57,7 +57,7 @@ func TestSetupSSHConfig(t *testing.T) {
 
 	// Once it's there, setup doesn't ask again.
 	ta.stdout.Reset()
-	ta.typing("", "", "", "", "")
+	ta.typing("", "", "", "")
 	ta.mustRun(t, "setup", "box")
 	if strings.Contains(ta.stdout.String(), "~/.ssh/config") {
 		t.Errorf("asked again:\n%s", ta.stdout)
@@ -79,7 +79,7 @@ func TestSetupSSHConfig(t *testing.T) {
 func TestSetupSSHConfigDeclined(t *testing.T) {
 	ta := newTestApp(t, "0.1.0")
 	ta.withKey(t, "id_ed25519")
-	ta.typing("box", "", "", "", "", "", "y", "n")
+	ta.typing("box", "", "", "", "", "y", "n")
 	ta.mustRun(t, "setup")
 	if exists(filepath.Join(ta.home, ".ssh", "config")) {
 		t.Error("wrote ~/.ssh/config")
@@ -102,7 +102,7 @@ func TestSetupSSHConfigLinked(t *testing.T) {
 	if err := os.Symlink(dotfile, link); err != nil {
 		t.Fatal(err)
 	}
-	ta.typing("box", "", "", "", "", "", "y", "y")
+	ta.typing("box", "", "", "", "", "y", "y")
 	ta.mustRun(t, "setup")
 	if info, err := os.Lstat(link); err != nil || info.Mode()&os.ModeSymlink == 0 {
 		t.Error("replaced the link")

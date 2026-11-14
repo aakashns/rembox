@@ -36,18 +36,9 @@ func asUser(s config.Server, command ...string) []string {
 	return append([]string{"-t"}, sshArgs(s, command...)...)
 }
 
-// asRoot is sshArgs to run command on s as root (with sudo unless rembox logs
-// in as root), at a terminal (-t), so sudo and the command can ask questions.
-func asRoot(s config.Server, command ...string) []string {
-	if s.User != "root" {
-		command = append([]string{"sudo"}, command...)
-	}
-	return asUser(s, command...)
-}
-
 // runScript runs script on s with scriptArgs, after showing the command, with
 // its output going to stdout. args are the ssh arguments up to "bash -c", from
-// sshArgs or asRoot. The script goes in the command, quoted, so the server's
+// asUser. The script goes in the command, quoted, so the server's
 // shell passes it to bash as it is.
 func (a *App) runScript(s config.Server, args []string, script remote.Script, stdout io.Writer, scriptArgs ...string) error {
 	after := []string{"bash"} // the script's $0

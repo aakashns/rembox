@@ -11,15 +11,16 @@ but follow this repo's conventions (AGENTS.md, and the style of `cli/internal/re
 ## Done
 
 - [x] Upgrade every package, and turn on daily security updates (unattended-upgrades)
-- [x] Add your user, with sudo that asks for its password and root's SSH keys
+- [x] Add your user, with sudo that asks for its password and root's SSH keys. The server asks
+      for its name just before adding it; `userWriter` in `setup.go` reads it back.
+- [x] Each session says it has logged in, and why it needs sudo before sudo asks (`as_root`).
 - [x] Move ssh to a random port, with keys only and no root login; fail2ban
 - [x] ufw: block every incoming connection but ssh
 - [x] Restart the server, if an update needs it
 - [x] Base dev packages (`BASIC_PACKAGES` in `update.sh`): build-essential, git, gh, curl, wget,
       zip, unzip, jq, ripgrep, fd-find (plus an `fd` link to `fdfind`), htop, tmux, zsh, nano,
-      man-db, dnsutils, ufw. fzf and zoxide come from their GitHub releases instead, pinned with
-      SHA-256s (`install_release`), as apt's are old (Debian 12: fzf 0.38, zoxide 0.4). Bump the
-      pins now and then. These install in `start` now, as `home` needs zsh and git.
+      man-db, dnsutils, ufw. fzf and zoxide come from their latest GitHub releases instead
+      (`install_release`), as apt's are old. These install in `start`, as `home` needs zsh and git.
 - [x] Swap file as big as memory, up to 4 GiB, unless there's swap already; swappiness 10
       (`swap.sh`). Skipped in containers.
 - [x] Generate the locales your Mac sends over ssh (LANG, LC_*), so programs don't warn
