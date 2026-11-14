@@ -22,10 +22,10 @@ build: ## Build bin/rembox for this machine
 test: ## Run the tests (including install.sh's, against a pretend release)
 	go test -race ./...
 
-lint: ## Check formatting, vet the code, and shellcheck install.sh and the server scripts
+lint: ## Check formatting, vet the code, and shellcheck install.sh, scripts/ and the server scripts
 	@test -z "$$(gofmt -l .)" || { echo "Needs gofmt:"; gofmt -l .; exit 1; }
 	go vet ./...
-	shellcheck ../site/public/install.sh
+	shellcheck ../site/public/install.sh ../scripts/*.sh
 	@# The server scripts are checked as rembox sends setup.sh: lib.sh, the steps, then setup.sh.
 	cd internal/remote && for s in lib.sh $$(ls *.sh | grep -vx 'lib.sh\|setup.sh') setup.sh; do \
 	  cat "$$s"; echo; done | shellcheck -s bash -

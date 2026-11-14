@@ -78,17 +78,7 @@ but follow this repo's conventions (AGENTS.md, and the style of `cli/internal/re
 
 ## Testing on real machines
 
-- `make lint test` in `cli/` covers the CLI, and shellchecks the scripts.
-- To run new server steps for real, make throwaway OrbStack machines
-  (`orb create ubuntu:noble NAME`, `orb create debian:bookworm NAME`), run lib.sh, the step
-  files and a small `main` with `orb -m NAME -u root bash -c "$body" bash ARGS`, twice, to check
-  the second run changes nothing, then `orb delete -f NAME`. OrbStack machines are containers,
-  so they skip swap.
-- `~/workspace/scratch/devbox-setup/test/orb-fresh.sh` makes an OrbStack machine that looks
-  like a fresh cloud server (cloud-init, root ssh with a key), for running `rembox setup` itself.
-  It makes Ubuntu machines; `orb create ... debian:bookworm` with the same cloud-config works for
-  Debian. Run rembox with `HOME` and `XDG_CONFIG_HOME` in a temp folder, so your own config is
-  untouched, and `expect` to answer its questions (they're in bold, so match loosely, and set a
-  timeout that fails loudly).
-- Steps for your user (`home`) run with `orb -m NAME -u USER`. To try zsh interactively, start
-  `tmux new-session -d 'zsh -l'` on the server, `tmux send-keys`, then `tmux capture-pane -p`.
+See **Development** in README.md: `scripts/e2e.sh` runs `rembox setup` twice on a fresh OrbStack
+machine. Run it on `debian:bookworm` too for changes to the server scripts.
+To try zsh on a machine without a terminal, `tmux new-session -d 'zsh -l'` on it, then
+`tmux send-keys` and `tmux capture-pane -p`.
