@@ -135,10 +135,11 @@ if [[ -o zle ]] && (($+commands[fzf])); then
   source <(fzf --zsh)
 fi
 
-# The prompt: you@the server's name, the folder, and in a git repo, the branch,
-# with * if there are changes to commit, and ⇡N and ⇣N if it's N commits
-# ahead of or behind its upstream. git status runs in the background, so a big
-# repo doesn't slow the prompt down; * and the arrows show up once it's done.
+# The prompt: you@the server's full name (%M; %m stops at the first dot), the
+# folder, and in a git repo, the branch, with * if there are changes to commit,
+# and ⇡N and ⇣N if it's N commits ahead of or behind its upstream. git status
+# runs in the background, so a big repo doesn't slow the prompt down; * and the
+# arrows show up once it's done.
 autoload -Uz add-zsh-hook
 setopt prompt_subst
 typeset -g _rembox_git='' _rembox_branch='' _rembox_marks='' _rembox_dir='' _rembox_fd=''
@@ -205,7 +206,7 @@ _rembox_git_done() {
 }
 
 add-zsh-hook precmd _rembox_prompt
-PROMPT='%F{8}%n@%m%f %F{blue}%~%f$_rembox_git %(?.%F{green}.%F{red})❯%f '
+PROMPT='%F{8}%n@%M%f %F{blue}%~%f$_rembox_git %(?.%F{green}.%F{red})❯%f '
 
 # zoxide: z FOLDER goes to the folder you use most that matches, and zi picks
 # one with fzf. It goes last, after compinit.
