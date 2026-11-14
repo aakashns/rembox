@@ -152,6 +152,12 @@ func (a *App) done(msg string) {
 	fmt.Fprintf(a.Stdout, "\n%s %s\n", a.paint(green, "✓"), msg)
 }
 
+// heading says what rembox does next, like logging in to a server, so the
+// questions that follow, like ssh's, make sense.
+func (a *App) heading(msg string) {
+	fmt.Fprintf(a.Stdout, "\n\n%s %s\n", a.paint(cyan, "==>"), a.paint(bold, msg))
+}
+
 // note says something worth knowing that isn't a problem, or a problem
 // rembox carries on after.
 func (a *App) note(msg string) {
@@ -393,7 +399,7 @@ func (a *App) confirm(question string, def bool) bool {
 // answered.
 func (a *App) ask(question, def string) (string, error) {
 	if def != "" {
-		fmt.Fprintf(a.Stdout, "%s [%s]: ", a.paint(bold, question), def)
+		fmt.Fprintf(a.Stdout, "%s %s: ", a.paint(bold, question), a.paint(dim, "[default: "+def+"]"))
 	} else {
 		fmt.Fprintf(a.Stdout, "%s: ", a.paint(bold, question))
 	}

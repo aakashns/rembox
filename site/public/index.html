@@ -34,10 +34,10 @@
     </header>
 
     <main id="main">
-      <h1>Remote dev boxes, <br class="mobile" />set up securely</h1>
+      <h1>Set up and manage <br class="mobile" />remote development machines</h1>
       <p class="lede">
-        rembox turns a fresh Ubuntu server into a secure remote development machine, and helps you
-        manage it from your Mac.
+        Point rembox at a fresh Ubuntu or Debian server, answer a few questions, and get a locked-down
+        box with your own user, a firewall, zsh and dev tools, ready to code on over ssh.
       </p>
 
       <p>Run this on your Mac (or a Linux machine) to install rembox:</p>
@@ -59,6 +59,7 @@
                 saves it to <a href="https://man.openbsd.org/ssh_config" target="_blank"><code>~/.ssh/config</code></a>, so you can
                 connect with <code>ssh &lt;name&gt;</code>
               </li>
+              <li>makes that name the server’s hostname</li>
               <li>
                 logs in, upgrades all packages, and turns on
                 <a href="https://wiki.debian.org/UnattendedUpgrades" target="_blank">unattended-upgrades</a>
@@ -69,8 +70,8 @@
             <strong>Locks down SSH access</strong>
             <ul>
               <li>
-                creates a non-root user with <a href="https://www.sudo.ws/" target="_blank"><code>sudo</code></a>, and configures a
-                password for it
+                creates a non-root user with <a href="https://www.sudo.ws/" target="_blank"><code>sudo</code></a>, asking you for
+                its name and password
               </li>
               <li>moves <a href="https://www.openssh.com/" target="_blank">SSH</a> from 22 to a random port to counter automated attacks</li>
               <li>
@@ -95,7 +96,7 @@
               </li>
               <li>
                 makes <a href="https://www.zsh.org/" target="_blank">zsh</a> your shell, with autosuggestions, syntax highlighting,
-                <a href="https://github.com/ajeetdsouza/zoxide" target="_blank">zoxide</a>, and a prompt showing git status
+                <a href="https://github.com/ajeetdsouza/zoxide" target="_blank">zoxide</a>, and a prompt showing user@host and git status
               </li>
               <li>
                 adds <a href="https://wiki.debian.org/Swap" target="_blank">swap</a> as big as the server’s memory (up to 4 GiB), if it

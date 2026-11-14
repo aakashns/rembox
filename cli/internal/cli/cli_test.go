@@ -42,6 +42,15 @@ func scriptIn(args []string) string {
 	return ""
 }
 
+// tellUser is what setup.sh start does once you've answered its question:
+// tells rembox your user, as if you took the default, DEFAULT_USER.
+func tellUser(args []string, stdout io.Writer) error {
+	if sa := scriptArgs(args); sa[0] == "start" {
+		fmt.Fprintf(stdout, "%s%s\a\r\n", userMarker, sa[1])
+	}
+	return nil
+}
+
 // newTestApp returns an App running as version current, installed at a temp
 // path, talking to a fake release server.
 func newTestApp(t *testing.T, current string) *testApp {
@@ -96,7 +105,7 @@ func newTestApp(t *testing.T, current string) *testApp {
 					return ta.onScript(script, args, stdout)
 				}
 				fmt.Fprintln(stdout, "(what setup.sh prints)")
-				return nil
+				return tellUser(args, stdout)
 			}
 			return fmt.Errorf("the tests don't fake %s", name)
 		},

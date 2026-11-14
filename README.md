@@ -22,8 +22,9 @@ See [rembox.aakashns.com](https://rembox.aakashns.com) for the docs. Until the s
 - [`lib.sh`](cli/internal/remote/lib.sh): helpers every script starts with, to show and run each command.
 - [`setup.sh`](cli/internal/remote/setup.sh): runs the steps below, in three ssh sessions: `start`, `home` and `finish`.
 - [`check.sh`](cli/internal/remote/check.sh): checks the server runs Ubuntu or Debian, on arm64 or amd64.
-- [`update.sh`](cli/internal/remote/update.sh): upgrades packages, turns on daily security updates, and installs dev tools.
-- [`user.sh`](cli/internal/remote/user.sh): adds your user, with a sudo password and your SSH keys.
+- [`hostname.sh`](cli/internal/remote/hostname.sh): makes the server's name in rembox its hostname.
+- [`update.sh`](cli/internal/remote/update.sh): upgrades packages, turns on daily security updates, and installs dev tools (fzf and zoxide from their latest releases).
+- [`user.sh`](cli/internal/remote/user.sh): asks for your user's name, and adds it, with a sudo password and your SSH keys.
 - [`sshd.sh`](cli/internal/remote/sshd.sh): moves ssh to a new port, with keys only and no root login.
 - [`firewall.sh`](cli/internal/remote/firewall.sh): turns on ufw, blocking every incoming connection but ssh.
 - [`zsh.sh`](cli/internal/remote/zsh.sh): sets up zsh for your user, with plugins, fzf, zoxide and a git prompt.

@@ -59,6 +59,18 @@ func SaveServer(dir string, s Server) error {
 	return writeSSHConfig(dir)
 }
 
+// RemoveServer removes the server called name saved under dir, then rewrites
+// the ssh config.
+func RemoveServer(dir, name string) error {
+	if err := CheckName(name); err != nil {
+		return err
+	}
+	if err := os.Remove(serverPath(dir, name)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	return writeSSHConfig(dir)
+}
+
 // WriteFile writes data to path with perm, making its folder if need be
 // (readable only by you). It writes a temporary file and renames it, so a
 // failed write doesn't leave half a file in place of a good one.
