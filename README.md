@@ -33,6 +33,22 @@ See [rembox.aakashns.com](https://rembox.aakashns.com) for the docs. Until the s
 - [`locale.sh`](cli/internal/remote/locale.sh): adds your Mac's locale, so programs on the server don't warn.
 - [`restart.sh`](cli/internal/remote/restart.sh): restarts the server, if an update needs it and you agree.
 
+## Development
+
+In `cli/`, `make build` builds `bin/rembox`, and `make lint test` checks the code and the server
+scripts. To try a change on a real server, use an [OrbStack](https://orbstack.dev) machine:
+
+- `scripts/orb-server.sh NAME [IMAGE]` makes a machine that looks like a fresh cloud server
+  (`ubuntu:noble` by default, or `debian:bookworm`), and prints how to log in to it. Then run
+  `cli/bin/rembox setup` with those answers, and again with `rembox setup NAME`, to check the
+  second run changes nothing. `orb delete -f NAME` removes it.
+- `scripts/e2e.sh [IMAGE]` does all that, answering setup's questions itself, in a temp HOME.
+- To run one step by itself, send lib.sh, its file and a call to it:
+  `orb -m NAME -u root bash -c "$(cat cli/internal/remote/{lib,swap}.sh; echo setup_swap)"`.
+- If `NAME.orb.local` says "No route to host", give your terminal Local Network access in
+  macOS's settings, or use `127.0.0.1`, which OrbStack forwards to the machine.
+- OrbStack machines are containers, so setup skips swap.
+
 ## Releasing
 
 Every pull request bumps [`cli/VERSION`](cli/VERSION) (CI checks it). Merging to main runs
