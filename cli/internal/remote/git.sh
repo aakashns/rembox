@@ -76,7 +76,7 @@ setup_git() {
 setup_github() {
   step "Log in to GitHub with gh"
   ((EUID != 0)) || fail "Run this as your user, not root."
-  local question="Log in to GitHub now?" default=yes login
+  local question="Log in to GitHub now?" default=yes login flags help
   if gh auth status --hostname github.com &>/dev/null; then
     login=$(gh api user --jq .login 2>/dev/null || true)
     question="gh is logged in to GitHub${login:+ as $login}. Log in again?" default=no
@@ -84,9 +84,17 @@ setup_github() {
     info "gh logs in with a code: open the link it shows on any device, and enter the code. Coding agents running as you can use this login too."
   fi
   if confirm "$question" "$default"; then
-    # gh shows a code and a link. BROWSER=false keeps it from opening the
-    # link in a text browser on the server, like w3m, if there is one.
-    if ! BROWSER=false at_terminal gh auth login --hostname github.com --git-protocol https --web; then
+    # gh shows a code and a link. Without prompts, it doesn't ask whether git
+    # should use its login (gh auth setup-git does that below), or wait for
+    # Enter to open a browser on the server, which has none. --scopes workflow
+    # lets git push GitHub Actions workflows, as gh asks for when git uses its
+    # login. Newer gh tries the server's clipboard, which it hasn't, and
+    # suggests --expiring tokens, which need git 2.46; their flags stop that.
+    flags=(--hostname github.com --git-protocol https --web --scopes workflow)
+    help=$(gh auth login --help 2>&1 || true)
+    [[ $help == *--clipboard* ]] && flags+=(--clipboard=false)
+    [[ $help == *--expiring* ]] && flags+=(--expiring=false)
+    if ! GH_PROMPT_DISABLED=1 at_terminal gh auth login "${flags[@]}"; then
       warn "gh couldn't log in, as it says above. To try again: gh auth login, then gh auth setup-git"
       checklist warn "gh isn't logged in to GitHub"
       return
