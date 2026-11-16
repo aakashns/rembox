@@ -14,4 +14,5 @@
 - `rembox setup` must be idempotent: every step in `cli/internal/remote` checks the server's
   state and changes only what needs changing, so running it again is harmless.
 - README.md lists the server scripts in the order they run; keep it current when adding one.
+- The last FAQ lists what `rembox setup` installs and sets up; update it when adding or removing a package.
 - Every PR bumps `cli/VERSION` (merging releases it) and updates the site as needed.
