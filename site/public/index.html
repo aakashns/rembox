@@ -315,6 +315,79 @@
             <a href="https://github.com/aakashns/rembox/pulls" target="_blank">pull request</a>.
           </div>
         </details>
+        <details>
+          <summary>What does rembox install and set up on the server?</summary>
+          <div>
+            <p>Security</p>
+            <ul>
+              <li><a href="https://help.ubuntu.com/community/UFW" target="_blank">ufw</a> blocks every incoming connection except SSH.</li>
+              <li><a href="https://github.com/fail2ban/fail2ban" target="_blank">fail2ban</a> bans addresses that keep failing to log in.</li>
+              <li><a href="https://wiki.debian.org/UnattendedUpgrades" target="_blank">unattended-upgrades</a> installs security updates every day.</li>
+              <li><a href="https://www.sudo.ws/" target="_blank">sudo</a> is password-protected root for your user.</li>
+              <li><a href="https://wiki.debian.org/Locale" target="_blank">locales</a> adds your Mac’s locale, so programs don’t warn.</li>
+            </ul>
+            <p>Dev tools</p>
+            <ul>
+              <li><a href="https://packages.debian.org/stable/build-essential" target="_blank">build-essential</a> is gcc, g++, make, and the headers they need.</li>
+              <li><a href="https://git-scm.com/" target="_blank">git</a> is version control.</li>
+              <li><a href="https://cli.github.com/" target="_blank">gh</a> is GitHub’s command line, from GitHub’s apt repo, not the distro’s.</li>
+              <li><a href="https://curl.se/" target="_blank">curl</a> fetches a URL.</li>
+              <li><a href="https://www.gnu.org/software/wget/" target="_blank">wget</a> downloads a file, and retries if it fails.</li>
+              <li><a href="https://infozip.sourceforge.net/Zip.html" target="_blank">zip</a> packs files into a .zip.</li>
+              <li><a href="https://infozip.sourceforge.net/UnZip.html" target="_blank">unzip</a> unpacks a .zip.</li>
+              <li><a href="https://jqlang.org/" target="_blank">jq</a> reads and edits JSON.</li>
+              <li><a href="https://github.com/BurntSushi/ripgrep" target="_blank">ripgrep</a> searches through files. The command is rg.</li>
+              <li><a href="https://github.com/sharkdp/fd" target="_blank">fd</a> finds files by name.</li>
+              <li><a href="https://htop.dev/" target="_blank">htop</a> is a live view of processes, CPU, and memory.</li>
+              <li><a href="https://www.nano-editor.org/" target="_blank">nano</a> is a simple text editor.</li>
+              <li><a href="https://man-db.nongnu.org/" target="_blank">man</a> shows manual pages.</li>
+              <li><a href="https://packages.debian.org/stable/dnsutils" target="_blank">dnsutils</a> is dig and nslookup.</li>
+              <li><a href="https://fukuchi.org/works/qrencode/" target="_blank">qrencode</a> draws the QR code for T3 Code’s phone app.</li>
+            </ul>
+            <p>Shell</p>
+            <ul>
+              <li><a href="https://www.zsh.org/" target="_blank">zsh</a> is your login shell.</li>
+              <li><a href="https://github.com/zdharma-continuum/zinit" target="_blank">zinit</a> loads the plugins below.</li>
+              <li><a href="https://github.com/zsh-users/zsh-syntax-highlighting" target="_blank">zsh-syntax-highlighting</a> colors a command as you type it.</li>
+              <li><a href="https://github.com/zsh-users/zsh-autosuggestions" target="_blank">zsh-autosuggestions</a> suggests the rest of a command from your history.</li>
+              <li><a href="https://github.com/zsh-users/zsh-completions" target="_blank">zsh-completions</a> adds extra tab completions.</li>
+              <li><a href="https://github.com/ohmyzsh/ohmyzsh/tree/master/plugins/git" target="_blank">Oh My Zsh git</a> adds aliases like gst, gco, and ggpush.</li>
+              <li><a href="https://github.com/junegunn/fzf" target="_blank">fzf</a> is a fuzzy finder. Ctrl-R searches history, Ctrl-T finds files, Alt-C changes folder.</li>
+              <li><a href="https://github.com/ajeetdsouza/zoxide" target="_blank">zoxide</a> jumps to folders you’ve used. z matches a name; zi picks one with fzf.</li>
+              <li><a href="https://zellij.dev/" target="_blank">Zellij</a> is a terminal workspace. An SSH login starts it locked; Ctrl+g unlocks it.</li>
+            </ul>
+            <p>Languages</p>
+            <ul>
+              <li><a href="https://viteplus.dev/" target="_blank">Vite+</a> installs and runs Node. The command is vp.</li>
+              <li><a href="https://nodejs.org/" target="_blank">Node</a> is the latest release, as Vite+’s default.</li>
+              <li><a href="https://bun.sh/" target="_blank">bun</a> is the latest release, in ~/.bun.</li>
+              <li><a href="https://docs.astral.sh/uv/" target="_blank">uv</a> installs Python.</li>
+              <li><a href="https://www.python.org/" target="_blank">Python</a> is the latest uv can install, as python and python3.</li>
+              <li><a href="https://rustup.rs/" target="_blank">rustup</a> installs and updates Rust.</li>
+              <li><a href="https://www.rust-lang.org/" target="_blank">Rust</a> is the latest stable, with cargo, clippy, and rustfmt.</li>
+              <li><a href="https://go.dev/" target="_blank">Go</a> is the latest release, in /usr/local/go.</li>
+            </ul>
+            <p>Coding agents. Setup asks before each of these. No skips that one.</p>
+            <ul>
+              <li><a href="https://code.claude.com/" target="_blank">Claude Code</a> is Anthropic’s coding agent. Logs in with a link.</li>
+              <li><a href="https://openai.com/codex/" target="_blank">Codex</a> is OpenAI’s coding agent. Logs in with a code, or an API key.</li>
+              <li><a href="https://opencode.ai/" target="_blank">OpenCode</a> is an open-source agent for many model providers.</li>
+              <li><a href="https://pi.dev/" target="_blank">Pi</a> is a small agent you can extend. Log in with /login.</li>
+            </ul>
+            <p>Browser testing</p>
+            <ul>
+              <li><a href="https://playwright.dev/" target="_blank">Playwright</a> runs browser tests for the agents.</li>
+              <li><a href="https://www.chromium.org/" target="_blank">Chromium</a> is the browser Playwright drives, plus the libraries it needs.</li>
+            </ul>
+            <p>Remote access</p>
+            <ul>
+              <li>
+                <a href="https://t3.codes/" target="_blank">T3 Code</a> runs in the background. Your phone and browser reach it through
+                <a href="https://github.com/pingdotgg/t3code/blob/main/docs/user/remote-access.md" target="_blank">T3 Connect</a>, with no ports opened.
+              </li>
+            </ul>
+          </div>
+        </details>
       </section>
     </main>
 
