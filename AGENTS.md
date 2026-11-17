@@ -5,6 +5,7 @@
   command or section, no walls of text; details belong in `rembox help`. Run every change to
   its wording by the user first, and let them edit it.
 - To show the site, run it with live reload: `npx live-server site/public --port=8788`.
+- Test the site, and take its PR screenshots, with Playwright.
 - `rembox help setup` lists setup's steps in the site's words; a test checks they match.
 - `install.sh`, `cli/Makefile` and `cli/internal/release` share asset names.
 - Store local files under `config.Dir()`, so `implode` removes them.
