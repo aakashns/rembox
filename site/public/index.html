@@ -89,7 +89,7 @@
         </div>
         <div class="term-screen" id="term-screen">
           <div><span data-step="0"><span class="t-green">$</span> </span><span data-step="700" data-type>rembox setup</span></div>
-          <div data-step="500"><b>Server IP address or hostname</b>: <span data-step="500" data-type>203.0.113.42</span></div>
+          <div data-step="500"><b>Remote server IP address or hostname</b>: <span data-step="500" data-type>203.0.113.42</span></div>
           <div data-step="300"><b>SSH port</b> <span class="t-dim">[default: 22]</span>: </div>
           <div data-step="700"><b>User to log in as</b> <span class="t-dim">[default: root]</span>: </div>
           <div data-step="700"><b>SSH private key</b> <span class="t-dim">[default: ~/.ssh/id_ed25519]</span>: </div>
@@ -241,6 +241,25 @@
       <section class="faq" aria-labelledby="faq">
         <h2 id="faq">Frequently Asked Questions</h2>
         <details>
+          <summary>What do I need to do before installing rembox?</summary>
+          <div>
+            Generate an SSH key pair on your laptop with <code>ssh-keygen -t ed25519</code>, if you don’t have one.
+            Then rent a cloud server from a provider like
+            <a href="https://www.hetzner.com/cloud/" target="_blank">Hetzner</a>,
+            <a href="https://www.digitalocean.com/products/droplets" target="_blank">DigitalOcean</a>, or
+            <a href="https://www.ovhcloud.com/en/vps/" target="_blank">OVH</a>, and add your
+            public key to it, as in
+            <a href="https://docs.hetzner.com/cloud/servers/getting-started/creating-a-server/" target="_blank">Hetzner’s guide</a>.
+          </div>
+        </details>
+        <details>
+          <summary>Where should I install rembox: my laptop or the remote server?</summary>
+          <div>
+            You should install rembox ONLY on laptop/desktop (Mac, Linux, or WSL). rembox logs in to the server over ssh and sets it
+            up from there, so you don’t need to install anything on the server first.
+          </div>
+        </details>
+        <details>
           <summary>What exactly does rembox install and set up on the server?</summary>
           <div>
             <p>Security</p>
@@ -313,25 +332,6 @@
               </li>
               <li><a href="https://opentunnel.xyz/" target="_blank">opentunnel</a> gives a dev server a public link, so you can test it on your phone.</li>
             </ul>
-          </div>
-        </details>
-        <details>
-          <summary>What do I need to do before installing rembox?</summary>
-          <div>
-            Generate an SSH key pair on your laptop with <code>ssh-keygen -t ed25519</code>, if you don’t have one.
-            Then rent a cloud server from a provider like
-            <a href="https://www.hetzner.com/cloud/" target="_blank">Hetzner</a>,
-            <a href="https://www.digitalocean.com/products/droplets" target="_blank">DigitalOcean</a>, or
-            <a href="https://www.ovhcloud.com/en/vps/" target="_blank">OVH</a>, and add your
-            public key to it, as in
-            <a href="https://docs.hetzner.com/cloud/servers/getting-started/creating-a-server/" target="_blank">Hetzner’s guide</a>.
-          </div>
-        </details>
-        <details>
-          <summary>Where should I install rembox: my laptop or the remote server?</summary>
-          <div>
-            On your laptop/desktop (Mac, Linux, or WSL). rembox logs in to the server over ssh and sets it
-            up from there, so you don’t need to install anything on the server first.
           </div>
         </details>
         <details>

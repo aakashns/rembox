@@ -384,7 +384,7 @@ func (a *App) askServer(saved *config.Server) (config.Server, error) {
 		def = *saved
 		def.Key = tildePath(home, saved.Key)
 	}
-	s.Host, err = a.answer("Server IP address or hostname", def.Host, checkHost)
+	s.Host, err = a.answer("Remote server IP address or hostname", def.Host, checkHost)
 	if err != nil {
 		return s, err
 	}

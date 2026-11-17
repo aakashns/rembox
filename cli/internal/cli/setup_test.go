@@ -160,7 +160,7 @@ func TestSetupAgain(t *testing.T) {
 	ta.typing("new.example.com", "", "", "", "")
 	ta.mustRun(t, "setup", "box")
 	out := ta.stdout.String()
-	for _, want := range []string{"Server IP address or hostname [default: old.example.com]:", "SSH port [default: 2222]:",
+	for _, want := range []string{"Remote server IP address or hostname [default: old.example.com]:", "SSH port [default: 2222]:",
 		"User to log in as [default: ada]:", "SSH private key [default: ~/.ssh/id_ed25519]:",
 		"Name for this server [default: box]:", "Saved box (ada@new.example.com, port 2222)"} {
 		if !strings.Contains(out, want) {

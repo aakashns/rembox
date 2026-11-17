@@ -39,7 +39,7 @@ set stty_init "rows 50 columns 200"
 spawn $rembox setup {*}[lrange $argv 4 end]
 while 1 {
   expect {
-    -re {Server IP address or hostname[^\n]*: $} { send "$host\r" }
+    -re {Remote server IP address or hostname[^\n]*: $} { send "$host\r" }
     -re {SSH private key[^\n]*: $} { send "$key\r" }
     -re {Name for this server[^\n]*: $} { send "$name\r" }
     -re {(SSH port|User to log in as|Username)[^\n]*: $} { send "\r" }
