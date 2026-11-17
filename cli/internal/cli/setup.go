@@ -50,8 +50,7 @@ Get a server ready for development, securely. rembox setup:
      - installs Playwright with Chromium, so agents can do browser testing
      - installs opentunnel, so agents can share dev server links on your
        phone
-     - installs T3 Code and configures secure remote access via T3 Connect
-     - displays a QR code to set up T3 Code on your phone for remote access
+     - installs T3 Code and enables T3 Connect to let you code from your phone
 
 To reach a program on the server, like a dev server or database, forward its
 port over ssh: 'rembox tunnel NAME 3000' makes localhost:3000 on this machine

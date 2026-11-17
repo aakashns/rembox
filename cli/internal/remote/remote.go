@@ -23,7 +23,7 @@ type Script struct {
 }
 
 // Setup gets a server ready for development.
-var Setup = load("setup.sh", "check.sh", "hostname.sh", "git.sh", "update.sh", "toolchains.sh", "agents.sh", "opentunnel.sh", "instructions.sh", "t3.sh", "user.sh", "sshd.sh", "firewall.sh", "zsh.sh", "fail2ban.sh", "swap.sh", "locale.sh", "restart.sh")
+var Setup = load("setup.sh", "check.sh", "hostname.sh", "git.sh", "postgres.sh", "update.sh", "toolchains.sh", "agents.sh", "opentunnel.sh", "instructions.sh", "t3.sh", "user.sh", "sshd.sh", "firewall.sh", "zsh.sh", "fail2ban.sh", "swap.sh", "locale.sh", "restart.sh")
 
 func load(name string, steps ...string) Script {
 	s := Script{Name: name, Files: append(append([]string{"lib.sh"}, steps...), name)}

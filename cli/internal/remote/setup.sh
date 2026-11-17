@@ -6,7 +6,8 @@
 #   setup.sh start DEFAULT_USER DEFAULT_PORT LOGIN_PORT NAME
 #     As root, as the user you log in as, on LOGIN_PORT: checks that rembox
 #     can set up the server, makes NAME its hostname, adds swap, has apt
-#     install gh from GitHub's apt repo, installs the latest version of every
+#     install gh from GitHub's apt repo, and PostgreSQL from PostgreSQL's,
+#     installs the latest version of every
 #     package, has unattended-upgrades install security updates every day,
 #     installs tools for development and the latest Go, asks for your user's
 #     name (DEFAULT_USER, if you don't give one; DEFAULT_USER may be empty) and
@@ -30,7 +31,8 @@
 #     session, so ssh logs in only once.
 #
 #   setup.sh finish PORT [LOCALE...]
-#     As root, after home: sets sshd to listen only on PORT, with no root login,
+#     As root, after home: lets your user run psql as a PostgreSQL superuser,
+#     sets sshd to listen only on PORT, with no root login,
 #     turns on ufw to block every incoming connection but ssh on PORT, sets
 #     up fail2ban, adds the LOCALEs your Mac uses, then, if an update needs
 #     it, asks to restart the server.
@@ -55,6 +57,7 @@ main() {
     setup_swap
     checklist_send
     add_gh_repo
+    add_postgres_repo
     update
     setup_auto_upgrades
     checklist_send
@@ -107,6 +110,9 @@ main() {
 finish() {
   local port=$1
   shift
+  # rembox carried on as root with sudo, from your user.
+  add_postgres_role "$SUDO_USER"
+  checklist_send
   setup_sshd no "$port"
   setup_firewall "$port"
   setup_fail2ban "$port"

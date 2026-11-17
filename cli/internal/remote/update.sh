@@ -86,7 +86,7 @@ install_packages() {
 # (Zellij).
 BASIC_PACKAGES=(
   build-essential git gh curl wget zip unzip jq ripgrep fd-find htop zsh
-  nano man-db dnsutils ufw qrencode
+  nano man-db dnsutils ufw qrencode postgresql
 )
 
 # install_basics: installs BASIC_PACKAGES, the ones that aren't installed yet,

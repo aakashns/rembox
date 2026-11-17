@@ -60,6 +60,7 @@ agent_instructions() {
   - allow its host in the dev server if needed, like Vite's server.allowedHosts
   - run \`opentunnel route remove NAME\` when done
 - ufw blocks every other port. Don't change ufw, sshd, fail2ban or T3 Code service.
+- Run \`psql\` to access postgres as a superuser, then create per-project user & database(s)
 - Use the installed \`playwright\` with Chromium for browser testing. Clean up when done.
 - \`gh\` is logged in to GitHub. Work on branches; never force-push the default branch.
 - Never print, log or commit secrets (~/.codex, ~/.claude, ~/.pi, ~/.local, ~/.config, ~/.t3)
