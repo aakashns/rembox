@@ -33,7 +33,7 @@ Run `rembox setup` to begin setting up a remote server.
 - [`firewall.sh`](cli/internal/remote/firewall.sh): turns on ufw, blocking every incoming connection but ssh.
 - [`zsh.sh`](cli/internal/remote/zsh.sh): sets up zsh for your user, with plugins, fzf, zoxide, a git prompt, and Zellij on ssh logins, starting locked, with Ctrl+g to unlock it, and no startup tips.
 - [`agents.sh`](cli/internal/remote/agents.sh): asks whether to install Claude Code, Codex, OpenCode and Pi, installs each with its own installer, and logs it in, to a subscription or with API billing.
-- [`opentunnel.sh`](cli/internal/remote/opentunnel.sh): installs opentunnel, with its own installer, for public links to dev servers, to test them from your phone. Asks before upgrading it.
+- [`opentunnel.sh`](cli/internal/remote/opentunnel.sh): installs opentunnel, with its own installer, for public links to dev servers, to test them from your phone, and connects its tunnel. Asks before upgrading it.
 - [`instructions.sh`](cli/internal/remote/instructions.sh): writes `~/.config/rembox/AGENTS.md`, about the server, and links each agent's global instructions to it.
 - [`t3.sh`](cli/internal/remote/t3.sh): makes ~/work for your projects, installs T3 Code, connects it to your devices with T3 Connect, and shows a QR code for its phone app.
 - [`fail2ban.sh`](cli/internal/remote/fail2ban.sh): bans IP addresses that keep failing to log in.

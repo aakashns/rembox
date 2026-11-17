@@ -57,7 +57,7 @@ setup_zellij() {
     return
   fi
   local file=$HOME/$ZELLIJ_CONFIG preset
-  preset=$(sed -nE 's/^[[:space:]]*keybinds[[:space:]].*preset="([^"]*)".*/\1/p' "$file" 2>/dev/null | head -1)
+  preset=$(sed -nE 's/^[[:space:]]*keybinds[[:space:]].*preset="([^"]*)".*/\1/p' "$file" 2>/dev/null | head -1 || true)
   # zellij setup writes Zellij's default config first, if there's none.
   if [[ -z $preset ]]; then
     if ! run zellij setup --keybinding-preset unlock-first; then

@@ -24,10 +24,10 @@
 #     may be empty), installs the latest bun, Node, Python and Rust, or asks to
 #     upgrade them, then installs the coding agents USER picks, and logs them
 #     in, installs the latest Playwright, with Chromium, for them, and the
-#     latest opentunnel, for dev server links, writes instructions for them
-#     about the server, and installs T3 Code, connected to USER's devices
-#     with T3 Connect. Then carries on with finish, in the same session, so
-#     ssh logs in only once.
+#     latest opentunnel, connected, for dev server links, writes instructions
+#     for them about the server, and installs T3 Code, connected to USER's
+#     devices with T3 Connect. Then carries on with finish, in the same
+#     session, so ssh logs in only once.
 #
 #   setup.sh finish PORT [LOCALE...]
 #     As root, after home: sets sshd to listen only on PORT, with no root login,
