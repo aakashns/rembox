@@ -59,6 +59,9 @@ machine reach port 3000 on the server. Docker's published ports get past ufw,
 so setup has Docker publish them on 127.0.0.1 only, except on networks made
 before. To open one to the internet: 'docker run -p 0.0.0.0:80:80'.
 
+To test a dev server on your phone, have an agent run 'opentunnel route add
+PORT', which prints a public https link to it.
+
 ssh asks you to check the server's host key again the first time it logs in
 on the new port. If it can't log in there, open the port in your cloud
 provider's firewall, if it has one, then run 'rembox setup NAME' again.

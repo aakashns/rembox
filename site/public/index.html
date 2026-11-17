@@ -272,8 +272,10 @@
         <details>
           <summary>How do I open a dev server running on the machine?</summary>
           <div>
-            Forward its port over ssh: <code>ssh -L 3000:localhost:3000 &lt;MACHINE&gt;</code> makes
-            <code>localhost:3000</code> on your laptop reach port 3000 on the server.
+            Ask the agent for an <a href="https://opentunnel.xyz/" target="_blank">opentunnel</a> link:
+            <code>opentunnel route add 3000</code> prints a public https link to port 3000 that you can open on your phone.
+            From your laptop, you can also forward the port over ssh: <code>ssh -L 3000:localhost:3000 &lt;MACHINE&gt;</code>
+            makes <code>localhost:3000</code> on your laptop reach port 3000 on the server.
           </div>
         </details>
         <details>
