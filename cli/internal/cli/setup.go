@@ -37,8 +37,8 @@ Get a server ready for development, securely. rembox setup:
      - turns on the ufw firewall to block all incoming traffic except SSH
 
   3. Installs development tools and configures the shell
-     - installs git, gh, ripgrep, fd, fzf, jq, htop, Zellij, and other dev
-       tools
+     - installs git, gh, ripgrep, fd, fzf, jq, htop, Zellij, PostgreSQL, and
+       other dev tools
      - installs the latest Node (with Vite+), bun, Python (with uv), Rust and
        Go
      - makes zsh your shell, with curated plugins to improve your workflow
