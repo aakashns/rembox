@@ -85,6 +85,10 @@ dd ol {
   margin: 0.5em 0;
   padding-left: 1.4em;
 }
+/* Just room for the numbers, so they line up with the heading. */
+ol.steps {
+  padding-left: 1.2em;
+}
 ol.steps > li + li {
   margin-top: 0.6em;
 }
