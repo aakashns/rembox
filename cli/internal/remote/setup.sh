@@ -23,10 +23,11 @@
 #     gh isn't logged in, GIT_NAME and GIT_EMAIL, from git on your Mac (either
 #     may be empty), installs the latest bun, Node, Python and Rust, or asks to
 #     upgrade them, then installs the coding agents USER picks, and logs them
-#     in, installs the latest Playwright, with Chromium, for them, writes
-#     instructions for them about the server, and installs T3 Code, connected
-#     to USER's devices with T3 Connect. Then carries on with finish, in the
-#     same session, so ssh logs in only once.
+#     in, installs the latest Playwright, with Chromium, for them, and the
+#     latest opentunnel, for dev server links, writes instructions for them
+#     about the server, and installs T3 Code, connected to USER's devices
+#     with T3 Connect. Then carries on with finish, in the same session, so
+#     ssh logs in only once.
 #
 #   setup.sh finish PORT [LOCALE...]
 #     As root, after home: sets sshd to listen only on PORT, with no root login,
@@ -78,6 +79,8 @@ main() {
     checklist_send
     setup_agents
     setup_playwright
+    checklist_send
+    setup_opentunnel
     checklist_send
     setup_agent_instructions
     checklist_send
