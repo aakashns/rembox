@@ -70,6 +70,15 @@
         agents, and remote access from your phone.
       </p>
 
+      <p class="before-command">Run this on Mac, Linux, or WSL to install rembox:</p>
+      <div class="command">
+        <pre><code id="install-command">curl -fsSL https://rembox.aakashns.com/install.sh | sh</code></pre>
+        <!-- Shown by site.js. -->
+        <button type="button" id="copy" hidden aria-label="Copy install command">Copy</button>
+      </div>
+      <p class="after-command">Run <code>rembox setup</code> to begin<span class="desktop"> setting up a remote server</span>. <a href="#faq">Read FAQs</a></p>
+      <p id="copy-status" class="sr-only" role="status"></p>
+
       <!-- site.js plays it: each [data-step] shows after waiting its value in ms; [data-type]
            ones are typed. It's all laid out from the start, so the box never changes height. -->
       <figure class="term" aria-label="Running rembox setup">
@@ -107,14 +116,6 @@
           <div class="t-check" data-step="120"><span class="t-green">✓</span> ssh on port 47213 only, with keys and no root login; ufw and fail2ban on</div>
         </div>
       </figure>
-      <p>Run this on Mac, Linux, or WSL to install rembox:</p>
-      <div class="command">
-        <pre><code id="install-command">curl -fsSL https://rembox.aakashns.com/install.sh | sh</code></pre>
-        <!-- Shown by site.js. -->
-        <button type="button" id="copy" hidden aria-label="Copy install command">Copy</button>
-      </div>
-      <p class="after-command">Run <code>rembox setup</code> to begin setting up a remote server.</p>
-      <p id="copy-status" class="sr-only" role="status"></p>
 
       <section aria-labelledby="setup">
         <h2 id="setup">What does <code>rembox setup</code> do?</h2>
@@ -238,7 +239,7 @@
       </section>
 
       <section class="faq" aria-labelledby="faq">
-        <h2 id="faq">FAQs</h2>
+        <h2 id="faq">Frequently Asked Questions</h2>
         <details>
           <summary>Where should I install rembox: my laptop or the remote server?</summary>
           <div>
@@ -247,77 +248,19 @@
           </div>
         </details>
         <details>
+          <summary>What do I need to do before installing rembox?</summary>
+          <div>
+            Generate an SSH key pair on your laptop with <code>ssh-keygen -t ed25519</code>, if you don’t have one.
+            Then rent a cloud server from a provider like Hetzner, DigitalOcean, or OVH, and add your
+            public key to it, as in
+            <a href="https://docs.hetzner.com/cloud/servers/getting-started/creating-a-server/" target="_blank">Hetzner’s guide</a>.
+          </div>
+        </details>
+        <details>
           <summary>What servers does rembox work on?</summary>
           <div>
             Any Ubuntu or Debian server you can ssh into with a key, as root or a user with sudo, from
             any provider. A fresh one works best, since rembox sets up the firewall and SSH its own way.
-          </div>
-        </details>
-        <details>
-          <summary>Can I run rembox on a server I already use?</summary>
-          <div>
-            Yes. Each step checks the server first and changes only what needs changing. If ufw
-            already lets something in, like a web server on port 80, rembox asks whether to keep
-            each of those rules; any other incoming traffic but SSH gets blocked.
-          </div>
-        </details>
-        <details>
-          <summary>I can’t connect after the SSH port changed. What now?</summary>
-          <div>
-            Your cloud provider probably has a firewall of its own. Open the new port in it, then run
-            <code>rembox setup &lt;MACHINE&gt;</code> again to pick up where it left off.
-          </div>
-        </details>
-        <details>
-          <summary>How do I open a dev server running on the machine?</summary>
-          <div>
-            Ask the agent for an <a href="https://opentunnel.xyz/" target="_blank">opentunnel</a> link:
-            <code>opentunnel route add 3000</code> prints a public https link to port 3000 that you can open on your phone.
-            From your laptop, you can also run <code>rembox tunnel &lt;MACHINE&gt; 3000</code>, so
-            <code>localhost:3000</code> on your laptop reaches port 3000 on the server.
-          </div>
-        </details>
-        <details>
-          <summary>What does rembox keep on my laptop?</summary>
-          <div>
-            Only how to log in to each server, in <code>~/.config/rembox</code>, and one line in
-            <code>~/.ssh/config</code> that includes it. Nothing about the server itself.
-          </div>
-        </details>
-        <details>
-          <summary>How do I upgrade or uninstall rembox?</summary>
-          <div>
-            Run <code>rembox upgrade</code>, with sudo if it’s in <code>/usr/local/bin</code>. To
-            remove rembox and everything it keeps on your laptop, run <code>rembox implode</code>.
-          </div>
-        </details>
-        <details>
-          <summary>Can I install a specific version, or in another folder?</summary>
-          <div>
-            Yes. Set <code>REMBOX_VERSION</code> (like <code>0.1.0</code>) or
-            <code>REMBOX_INSTALL_DIR</code> (instead of <code>/usr/local/bin</code>) for the install
-            script:
-            <pre class="block"><code>curl -fsSL https://rembox.aakashns.com/install.sh \
-  | REMBOX_VERSION=0.1.0 REMBOX_INSTALL_DIR="$HOME/.local/bin" sh</code></pre>
-          </div>
-        </details>
-        <details>
-          <summary>How do I verify a release?</summary>
-          <div>
-            Releases are built by GitHub Actions, and the install script and
-            <code>rembox upgrade</code> check every download against its <code>SHA256SUMS</code>. To
-            check a binary’s signed build attestation:
-            <pre class="block"><code>gh attestation verify "$(command -v rembox)" --repo aakashns/rembox</code></pre>
-          </div>
-        </details>
-        <details>
-          <summary>Something went wrong, or I have an idea. What do I do?</summary>
-          <div>
-            First, run <code>rembox upgrade</code> to get the latest version, then run
-            <code>rembox setup &lt;MACHINE&gt;</code> again. If it still goes wrong,
-            <a href="https://github.com/aakashns/rembox/issues/new" target="_blank">open an issue</a>
-            on GitHub with what you ran and what it printed, or send a
-            <a href="https://github.com/aakashns/rembox/pulls" target="_blank">pull request</a>.
           </div>
         </details>
         <details>
@@ -393,6 +336,73 @@
               </li>
               <li><a href="https://opentunnel.xyz/" target="_blank">opentunnel</a> gives a dev server a public link, so you can test it on your phone.</li>
             </ul>
+          </div>
+        </details>
+        <details>
+          <summary>Can I run rembox on a server I already use?</summary>
+          <div>
+            Yes. Each step checks the server first and changes only what needs changing. If ufw
+            already lets something in, like a web server on port 80, rembox asks whether to keep
+            each of those rules; any other incoming traffic but SSH gets blocked.
+          </div>
+        </details>
+        <details>
+          <summary>I can’t connect after the SSH port changed. What now?</summary>
+          <div>
+            Your cloud provider probably has a firewall of its own. Open the new port in it, then run
+            <code>rembox setup &lt;MACHINE&gt;</code> again to pick up where it left off.
+          </div>
+        </details>
+        <details>
+          <summary>How do I open a dev server running on the machine?</summary>
+          <div>
+            Ask the agent for an <a href="https://opentunnel.xyz/" target="_blank">opentunnel</a> link:
+            <code>opentunnel route add 3000</code> prints a public https link to port 3000 that you can open on your phone.
+            From your laptop, you can also run <code>rembox tunnel &lt;MACHINE&gt; 3000</code>, so
+            <code>localhost:3000</code> on your laptop reaches port 3000 on the server.
+          </div>
+        </details>
+        <details>
+          <summary>What does rembox keep on my laptop?</summary>
+          <div>
+            Only how to log in to each server, in <code>~/.config/rembox</code>, and one line in
+            <code>~/.ssh/config</code> that includes it. Nothing about the server itself.
+          </div>
+        </details>
+        <details>
+          <summary>How do I upgrade or uninstall rembox?</summary>
+          <div>
+            Run <code>rembox upgrade</code>, with sudo if it’s in <code>/usr/local/bin</code>. To
+            remove rembox and everything it keeps on your laptop, run <code>rembox implode</code>.
+          </div>
+        </details>
+        <details>
+          <summary>Can I install a specific version, or in another folder?</summary>
+          <div>
+            Yes. Set <code>REMBOX_VERSION</code> (like <code>0.1.0</code>) or
+            <code>REMBOX_INSTALL_DIR</code> (instead of <code>/usr/local/bin</code>) for the install
+            script:
+            <pre class="block"><code>curl -fsSL https://rembox.aakashns.com/install.sh \
+  | REMBOX_VERSION=0.1.0 REMBOX_INSTALL_DIR="$HOME/.local/bin" sh</code></pre>
+          </div>
+        </details>
+        <details>
+          <summary>How do I verify a release?</summary>
+          <div>
+            Releases are built by GitHub Actions, and the install script and
+            <code>rembox upgrade</code> check every download against its <code>SHA256SUMS</code>. To
+            check a binary’s signed build attestation:
+            <pre class="block"><code>gh attestation verify "$(command -v rembox)" --repo aakashns/rembox</code></pre>
+          </div>
+        </details>
+        <details>
+          <summary>Something went wrong, or I have an idea. What do I do?</summary>
+          <div>
+            First, run <code>rembox upgrade</code> to get the latest version, then run
+            <code>rembox setup &lt;MACHINE&gt;</code> again. If it still goes wrong,
+            <a href="https://github.com/aakashns/rembox/issues/new" target="_blank">open an issue</a>
+            on GitHub with what you ran and what it printed, or send a
+            <a href="https://github.com/aakashns/rembox/pulls" target="_blank">pull request</a>.
           </div>
         </details>
       </section>
