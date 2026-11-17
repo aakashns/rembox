@@ -3,7 +3,7 @@
 [rembox.aakashns.com](https://rembox.aakashns.com): plain HTML in `public/`, with no build step,
 and `public/install.sh`, the installer. [`Caddyfile`](Caddyfile) serves it.
 
-To preview it locally: `python3 -m http.server -d public 8788`
+To preview it locally, with live reload: `npx live-server public --port=8788`
 
 `images/render.sh` renders `public/social.png` (the link preview, from `images/social.html`),
 `favicon.ico` and `apple-touch-icon.png` (from `icon.svg`). Re-run it when you change those.

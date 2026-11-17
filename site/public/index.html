@@ -244,7 +244,10 @@
           <summary>What do I need to do before installing rembox?</summary>
           <div>
             Generate an SSH key pair on your laptop with <code>ssh-keygen -t ed25519</code>, if you don’t have one.
-            Then rent a cloud server from a provider like Hetzner, DigitalOcean, or OVH, and add your
+            Then rent a cloud server from a provider like
+            <a href="https://www.hetzner.com/cloud/" target="_blank">Hetzner</a>,
+            <a href="https://www.digitalocean.com/products/droplets" target="_blank">DigitalOcean</a>, or
+            <a href="https://www.ovhcloud.com/en/vps/" target="_blank">OVH</a>, and add your
             public key to it, as in
             <a href="https://docs.hetzner.com/cloud/servers/getting-started/creating-a-server/" target="_blank">Hetzner’s guide</a>.
           </div>
@@ -261,6 +264,14 @@
           <div>
             Any Ubuntu or Debian server you can ssh into with a key, as root or a user with sudo, from
             any provider. A fresh one works best, since rembox sets up the firewall and SSH its own way.
+          </div>
+        </details>
+        <details>
+          <summary>What are the minimum system requirements?</summary>
+          <div>
+            An amd64 or arm64 server with 2 GB of memory and 20 GB of free disk. For coding agents
+            and big builds, 4 GB and 40 GB work better. rembox adds swap, up to 4 GB, for when memory
+            runs low.
           </div>
         </details>
         <details>
@@ -290,7 +301,7 @@
               <li><a href="https://www.nano-editor.org/" target="_blank">nano</a> is a simple text editor.</li>
               <li><a href="https://man-db.nongnu.org/" target="_blank">man</a> shows manual pages.</li>
               <li><a href="https://packages.debian.org/stable/dnsutils" target="_blank">dnsutils</a> is dig and nslookup.</li>
-              <li><a href="https://www.postgresql.org/" target="_blank">PostgreSQL</a> is a database server, reachable only from the server itself. Your user can run psql as a superuser.</li>
+              <li><a href="https://www.postgresql.org/" target="_blank">PostgreSQL</a> is a local-only database server; your user is a psql superuser.</li>
               <li><a href="https://fukuchi.org/works/qrencode/" target="_blank">qrencode</a> draws the QR code for T3 Code’s phone app.</li>
             </ul>
             <p>Shell</p>
@@ -301,7 +312,7 @@
               <li><a href="https://github.com/zsh-users/zsh-autosuggestions" target="_blank">zsh-autosuggestions</a> suggests the rest of a command from your history.</li>
               <li><a href="https://github.com/zsh-users/zsh-completions" target="_blank">zsh-completions</a> adds extra tab completions.</li>
               <li><a href="https://github.com/ohmyzsh/ohmyzsh/tree/master/plugins/git" target="_blank">Oh My Zsh git</a> adds aliases like gst, gco, and ggpush.</li>
-              <li><a href="https://github.com/junegunn/fzf" target="_blank">fzf</a> is a fuzzy finder. Ctrl-R searches history, Ctrl-T finds files, Alt-C changes folder.</li>
+              <li><a href="https://github.com/junegunn/fzf" target="_blank">fzf</a> is a fuzzy finder: Ctrl-R for history, Ctrl-T for files, Alt-C for folders.</li>
               <li><a href="https://github.com/ajeetdsouza/zoxide" target="_blank">zoxide</a> jumps to folders you’ve used. z matches a name; zi picks one with fzf.</li>
               <li><a href="https://zellij.dev/" target="_blank">Zellij</a> is a terminal workspace. An SSH login starts it locked; Ctrl+g unlocks it.</li>
             </ul>
@@ -331,8 +342,8 @@
             <p>Remote access</p>
             <ul>
               <li>
-                <a href="https://t3.codes/" target="_blank">T3 Code</a> runs in the background. Your phone and browser reach it through
-                <a href="https://github.com/pingdotgg/t3code/blob/main/docs/user/remote-access.md" target="_blank">T3 Connect</a>, with no ports opened.
+                <a href="https://t3.codes/" target="_blank">T3 Code</a> runs in the background; your phone reaches it via
+                <a href="https://github.com/pingdotgg/t3code/blob/main/docs/user/remote-access.md" target="_blank">T3 Connect</a>.
               </li>
               <li><a href="https://opentunnel.xyz/" target="_blank">opentunnel</a> gives a dev server a public link, so you can test it on your phone.</li>
             </ul>
