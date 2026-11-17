@@ -159,7 +159,7 @@ footer.site {
 /* Landing page */
 
 /* Line breaks only narrow screens take. */
-@media (min-width: 30.0625rem) {
+@media (min-width: 40rem) {
   br.mobile {
     display: none;
   }
@@ -389,7 +389,7 @@ dl.commands dd {
   display: none !important;
 }
 
-@media (max-width: 30rem) {
+@media (max-width: 39.9375rem) {
   html {
     font-size: 16px;
   }
