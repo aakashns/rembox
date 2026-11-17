@@ -241,41 +241,7 @@
       <section class="faq" aria-labelledby="faq">
         <h2 id="faq">Frequently Asked Questions</h2>
         <details>
-          <summary>What do I need to do before installing rembox?</summary>
-          <div>
-            Generate an SSH key pair on your laptop with <code>ssh-keygen -t ed25519</code>, if you don’t have one.
-            Then rent a cloud server from a provider like
-            <a href="https://www.hetzner.com/cloud/" target="_blank">Hetzner</a>,
-            <a href="https://www.digitalocean.com/products/droplets" target="_blank">DigitalOcean</a>, or
-            <a href="https://www.ovhcloud.com/en/vps/" target="_blank">OVH</a>, and add your
-            public key to it, as in
-            <a href="https://docs.hetzner.com/cloud/servers/getting-started/creating-a-server/" target="_blank">Hetzner’s guide</a>.
-          </div>
-        </details>
-        <details>
-          <summary>Where should I install rembox: my laptop or the remote server?</summary>
-          <div>
-            On your laptop/desktop (Mac, Linux, or WSL). rembox logs in to the server over ssh and sets it
-            up from there, so you don’t need to install anything on the server first.
-          </div>
-        </details>
-        <details>
-          <summary>What kinds of cloud servers does rembox work with?</summary>
-          <div>
-            Any Ubuntu or Debian server you can ssh into with a key, as root or a user with sudo, from
-            any provider. A fresh one works best, since rembox sets up the firewall and SSH its own way.
-          </div>
-        </details>
-        <details>
-          <summary>What are the minimum system requirements?</summary>
-          <div>
-            A 64-bit Intel, AMD, or ARM server with 2 GB of memory and 20 GB of free disk. For
-            coding agents and big builds, 4 GB and 40 GB work better. rembox adds swap, up to 4 GB,
-            for when memory runs low.
-          </div>
-        </details>
-        <details>
-          <summary>What does rembox install and set up on the server?</summary>
+          <summary>What exactly does rembox install and set up on the server?</summary>
           <div>
             <p>Security</p>
             <ul>
@@ -347,6 +313,40 @@
               </li>
               <li><a href="https://opentunnel.xyz/" target="_blank">opentunnel</a> gives a dev server a public link, so you can test it on your phone.</li>
             </ul>
+          </div>
+        </details>
+        <details>
+          <summary>What do I need to do before installing rembox?</summary>
+          <div>
+            Generate an SSH key pair on your laptop with <code>ssh-keygen -t ed25519</code>, if you don’t have one.
+            Then rent a cloud server from a provider like
+            <a href="https://www.hetzner.com/cloud/" target="_blank">Hetzner</a>,
+            <a href="https://www.digitalocean.com/products/droplets" target="_blank">DigitalOcean</a>, or
+            <a href="https://www.ovhcloud.com/en/vps/" target="_blank">OVH</a>, and add your
+            public key to it, as in
+            <a href="https://docs.hetzner.com/cloud/servers/getting-started/creating-a-server/" target="_blank">Hetzner’s guide</a>.
+          </div>
+        </details>
+        <details>
+          <summary>Where should I install rembox: my laptop or the remote server?</summary>
+          <div>
+            On your laptop/desktop (Mac, Linux, or WSL). rembox logs in to the server over ssh and sets it
+            up from there, so you don’t need to install anything on the server first.
+          </div>
+        </details>
+        <details>
+          <summary>What kinds of cloud servers does rembox work with?</summary>
+          <div>
+            Any Ubuntu or Debian server you can ssh into with a key, as root or a user with sudo, from
+            any provider. A fresh one works best, since rembox sets up the firewall and SSH its own way.
+          </div>
+        </details>
+        <details>
+          <summary>What are the minimum system requirements?</summary>
+          <div>
+            A 64-bit Intel, AMD, or ARM server with 2 GB of memory and 20 GB of free disk. For
+            coding agents and big builds, 4 GB and 40 GB work better. rembox adds swap, up to 4 GB,
+            for when memory runs low.
           </div>
         </details>
         <details>
