@@ -222,11 +222,8 @@
           <dd>
             Logs in to the server called NAME as configured, or runs a command on it.
           </dd>
-          <dt><code>rembox tunnel NAME PORT</code></dt>
-          <dd>
-            Makes localhost:PORT on your laptop reach PORT on the server, until you press Ctrl-C. Give
-            SERVER-PORT:LOCAL-PORT to use another local port.
-          </dd>
+          <dt><code>rembox tunnel NAME SERVER-PORT:LOCAL-PORT</code></dt>
+          <dd>Forwards SERVER-PORT to localhost:LOCAL-PORT, until Ctrl-C; give one PORT for both.</dd>
           <dt><code>rembox remove NAME</code></dt>
           <dd>Removes a server’s login details and ssh alias; the server itself stays as it is.</dd>
           <dt><code>rembox help [command]</code></dt>
