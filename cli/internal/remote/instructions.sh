@@ -55,14 +55,14 @@ agent_instructions() {
 - This is a development server controlled remotely using T3 Code desktop/mobile.
 - Be frugal, run one heavy build at a time, and stop dev servers when you're done.
 - Git repositories are cloned in ~/work, don't pollute the home directory
-- Bind dev servers to 127.0.0.1. For the user to test one, e.g. on their phone, run
-  \`opentunnel route add PORT\` and share the https link it prints (allow its host in the
-  dev server, like Vite's server.allowedHosts). \`opentunnel route remove NAME\` when done.
+- Bind dev servers to 127.0.0.1. For the user to test one, e.g. on their phone:
+  - run \`opentunnel route add PORT\` and share the https link it prints
+  - allow its host in the dev server if needed, like Vite's server.allowedHosts
+  - run \`opentunnel route remove NAME\` when done
 - ufw blocks every other port. Don't change ufw, sshd, fail2ban or T3 Code service.
 - Use the installed \`playwright\` with Chromium for browser testing. Clean up when done.
 - \`gh\` is logged in to GitHub. Work on branches; never force-push the default branch.
-- Never print, log or commit secrets (~/.codex, ~/.claude, ~/.pi, ~/.local/share/opencode,
-  ~/.config/gh, ~/.t3)
+- Never print, log or commit secrets (~/.codex, ~/.claude, ~/.pi, ~/.local, ~/.config, ~/.t3)
 END
 }
 
