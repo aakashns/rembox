@@ -408,10 +408,7 @@ dl.commands dd {
   header.site nav {
     gap: 1em;
   }
-  /* Small and wrapped, so the whole install command shows. */
-  .command pre {
+  .command code {
     font-size: 0.75rem;
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
   }
 }
