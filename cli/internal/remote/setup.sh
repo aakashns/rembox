@@ -9,7 +9,8 @@
 #     install gh from GitHub's apt repo, and PostgreSQL from PostgreSQL's,
 #     installs the latest version of every
 #     package, has unattended-upgrades install security updates every day,
-#     installs tools for development and the latest Go, asks for your user's
+#     reaches sites with only IPv4 through public NAT64, if the server has
+#     only IPv6, installs tools for development and the latest Go, asks for your user's
 #     name (DEFAULT_USER, if you don't give one; DEFAULT_USER may be empty) and
 #     adds it with your keys and zsh as its login shell, keeps its services
 #     running when it isn't logged in, for T3 Code, asks for the port to move
@@ -60,6 +61,8 @@ main() {
     add_postgres_repo
     update
     setup_auto_upgrades
+    checklist_send
+    setup_nat64
     checklist_send
     install_basics
     install_go

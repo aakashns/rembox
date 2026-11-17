@@ -269,6 +269,7 @@
               <li><a href="https://wiki.debian.org/UnattendedUpgrades" target="_blank">unattended-upgrades</a> installs security updates every day.</li>
               <li><a href="https://www.sudo.ws/" target="_blank">sudo</a> is password-protected root for your user.</li>
               <li><a href="https://wiki.debian.org/Locale" target="_blank">locales</a> adds your Mac’s locale, so programs don’t warn.</li>
+              <li><a href="https://www.freedesktop.org/software/systemd/man/latest/systemd-resolved.service.html" target="_blank">systemd-resolved</a>, on IPv6-only servers, looks up names with public NAT64 resolvers, to reach sites like GitHub.</li>
             </ul>
             <p>Dev tools</p>
             <ul>
@@ -346,7 +347,8 @@
           <div>
             A 64-bit Intel, AMD, or ARM server with 2 GB of memory and 20 GB of free disk. For
             coding agents and big builds, 4 GB and 40 GB work better. rembox adds swap, up to 4 GB,
-            for when memory runs low.
+            for when memory runs low. IPv6-only servers work too: rembox has them reach IPv4-only
+            sites, like GitHub, through public NAT64.
           </div>
         </details>
         <details>

@@ -58,6 +58,10 @@ reach port 3000 on the server. Docker's published ports get past ufw,
 so setup has Docker publish them on 127.0.0.1 only, except on networks made
 before. To open one to the internet: 'docker run -p 0.0.0.0:80:80'.
 
+If the server has only IPv6, setup has it look up names with public DNS64
+resolvers, from nat64.net and Trex, so it reaches sites with only IPv4, like
+GitHub, through their NAT64 gateways. If it has IPv4, setup undoes that.
+
 To test a dev server on your phone, have an agent run 'opentunnel route add
 PORT', which prints a public https link to it.
 

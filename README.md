@@ -28,6 +28,7 @@ Run `rembox setup` to begin setting up a remote server.
 - [`git.sh`](cli/internal/remote/git.sh): has apt install gh from GitHub's apt repo; later, as your user, sets your name and email for git and logs gh in to GitHub.
 - [`postgres.sh`](cli/internal/remote/postgres.sh): has apt install PostgreSQL from PostgreSQL's apt repo; later, adds a PostgreSQL superuser for your user, so it can run psql as itself.
 - [`update.sh`](cli/internal/remote/update.sh): upgrades packages, turns on daily security updates, and installs dev tools (fzf, zoxide and Zellij from their latest releases).
+- [`nat64.sh`](cli/internal/remote/nat64.sh): if the server has only IPv6, looks up names with public DNS64 resolvers, to reach sites with only IPv4, like GitHub, through NAT64.
 - [`toolchains.sh`](cli/internal/remote/toolchains.sh): installs the latest Go; later, as your user, the latest bun, Node (with Vite+), Python (with uv), Rust (with rustup) and Playwright (with Chromium). Asks before upgrading them.
 - [`user.sh`](cli/internal/remote/user.sh): asks for your user's name, and adds it, with a sudo password, your SSH keys and zsh.
 - [`sshd.sh`](cli/internal/remote/sshd.sh): moves ssh to the port you give, with keys only and no root login.
