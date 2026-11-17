@@ -30,7 +30,11 @@ func runSSH(a *App, args []string) error {
 	command := args[1:]
 
 	sshArgs := append(loginArgs(s), "--", s.Destination())
-	err = a.run("ssh", append(sshArgs, command...)...)
+	return sshError(a.run("ssh", append(sshArgs, command...)...))
+}
+
+// sshError is the error to return for err, from running ssh.
+func sshError(err error) error {
 	var ee *exec.ExitError
 	switch {
 	case errors.Is(err, exec.ErrNotFound):

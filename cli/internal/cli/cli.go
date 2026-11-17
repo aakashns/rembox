@@ -235,6 +235,12 @@ func commands() []command {
 			run:     runSSH,
 		},
 		{
+			name:    "tunnel",
+			summary: "Reach a port on a server at localhost, over ssh",
+			help:    tunnelHelp,
+			run:     runTunnel,
+		},
+		{
 			name:    "remove",
 			summary: "Remove a server from rembox, leaving the server as it is",
 			help:    removeHelp,

@@ -222,6 +222,11 @@
           <dd>
             Logs in to the server called NAME as configured, or runs a command on it.
           </dd>
+          <dt><code>rembox tunnel NAME PORT</code></dt>
+          <dd>
+            Makes localhost:PORT on your laptop reach PORT on the server, until you press Ctrl-C. Give
+            SERVER-PORT:LOCAL-PORT to use another local port.
+          </dd>
           <dt><code>rembox remove NAME</code></dt>
           <dd>Removes a server’s login details and ssh alias; the server itself stays as it is.</dd>
           <dt><code>rembox help [command]</code></dt>
@@ -274,8 +279,8 @@
           <div>
             Ask the agent for an <a href="https://opentunnel.xyz/" target="_blank">opentunnel</a> link:
             <code>opentunnel route add 3000</code> prints a public https link to port 3000 that you can open on your phone.
-            From your laptop, you can also forward the port over ssh: <code>ssh -L 3000:localhost:3000 &lt;MACHINE&gt;</code>
-            makes <code>localhost:3000</code> on your laptop reach port 3000 on the server.
+            From your laptop, you can also run <code>rembox tunnel &lt;MACHINE&gt; 3000</code>, so
+            <code>localhost:3000</code> on your laptop reaches port 3000 on the server.
           </div>
         </details>
         <details>

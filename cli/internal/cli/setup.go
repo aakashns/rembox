@@ -54,8 +54,8 @@ Get a server ready for development, securely. rembox setup:
      - displays a QR code to set up T3 Code on your phone for remote access
 
 To reach a program on the server, like a dev server or database, forward its
-port over ssh: 'ssh -L 3000:localhost:3000 NAME' makes localhost:3000 on this
-machine reach port 3000 on the server. Docker's published ports get past ufw,
+port over ssh: 'rembox tunnel NAME 3000' makes localhost:3000 on this machine
+reach port 3000 on the server. Docker's published ports get past ufw,
 so setup has Docker publish them on 127.0.0.1 only, except on networks made
 before. To open one to the internet: 'docker run -p 0.0.0.0:80:80'.
 
