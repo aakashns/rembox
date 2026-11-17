@@ -241,13 +241,6 @@
       <section class="faq" aria-labelledby="faq">
         <h2 id="faq">Frequently Asked Questions</h2>
         <details>
-          <summary>Where should I install rembox: my laptop or the remote server?</summary>
-          <div>
-            On your laptop/desktop (Mac, Linux, or WSL). rembox logs in to the server over ssh and sets it
-            up from there, so you don’t need to install anything on the server first.
-          </div>
-        </details>
-        <details>
           <summary>What do I need to do before installing rembox?</summary>
           <div>
             Generate an SSH key pair on your laptop with <code>ssh-keygen -t ed25519</code>, if you don’t have one.
@@ -257,7 +250,14 @@
           </div>
         </details>
         <details>
-          <summary>What servers does rembox work on?</summary>
+          <summary>Where should I install rembox: my laptop or the remote server?</summary>
+          <div>
+            On your laptop/desktop (Mac, Linux, or WSL). rembox logs in to the server over ssh and sets it
+            up from there, so you don’t need to install anything on the server first.
+          </div>
+        </details>
+        <details>
+          <summary>What kinds of cloud servers does rembox work with?</summary>
           <div>
             Any Ubuntu or Debian server you can ssh into with a key, as root or a user with sudo, from
             any provider. A fresh one works best, since rembox sets up the firewall and SSH its own way.
