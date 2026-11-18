@@ -65,10 +65,10 @@ ssh asks you to check the server's host key again the first time it logs in
 on the new port. If it can't log in there, open the port in your cloud
 provider's firewall, if it has one, then run 'rembox setup NAME' again.
 
-rembox keeps a Host block for each server in ~/.config/rembox/ssh_config. Once
-the server is set up, it asks to include that at the top of ~/.ssh/config, so
-'ssh NAME', and ssh to the server's address, log in on the new port as your
-user, as rembox does.
+rembox keeps each server as a Host block in ~/.config/rembox/ssh_config, which
+you can edit. Once the server is set up, it asks to include that at the top of
+~/.ssh/config, so 'ssh NAME', and ssh to the server's address, log in on the
+new port as your user, as rembox does.
 
 Give the NAME of a server you've added to set it up again: its address, port,
 user, key and name are the defaults, and any you change replace them. Run it any

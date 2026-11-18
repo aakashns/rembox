@@ -11,7 +11,8 @@ import (
 const listHelp = `Usage: rembox list
 
 List the servers added with 'rembox setup': each one's name, host, SSH port,
-the user rembox logs in as, and the SSH key it logs in with.
+the user rembox logs in as, and the SSH key it logs in with, from their Host
+blocks in ~/.config/rembox/ssh_config.
 `
 
 func runList(a *App, args []string) error {

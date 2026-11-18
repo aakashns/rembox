@@ -50,7 +50,7 @@ func TestSetupSSHConfig(t *testing.T) {
 	// The server as setup left it: your user, on the new port.
 	want := "\nHost box 203.0.113.10\n  HostName 203.0.113.10\n  Port 23456\n  User ada\n  IdentityFile " + key +
 		"\n  IdentitiesOnly yes\n  ServerAliveInterval 15\n"
-	if got := readFile(t, filepath.Join(ta.configDir, "ssh_config")); !strings.HasPrefix(got, "# Written by rembox") ||
+	if got := readFile(t, filepath.Join(ta.configDir, "ssh_config")); !strings.HasPrefix(got, "# Your rembox servers") ||
 		!strings.HasSuffix(got, want) {
 		t.Errorf("ssh_config:\n%s", got)
 	}

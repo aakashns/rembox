@@ -10,9 +10,9 @@ import (
 
 const removeHelp = `Usage: rembox remove NAME
 
-Remove the server called NAME from rembox: how rembox logs in to it, and its
-Host block in ~/.config/rembox/ssh_config. It asks first. The server itself
-stays as it is; to set it up again: rembox setup.
+Remove the server called NAME from rembox: its Host block in
+~/.config/rembox/ssh_config. It asks first. The server itself stays as it is;
+to set it up again: rembox setup.
 `
 
 func runRemove(a *App, args []string) error {

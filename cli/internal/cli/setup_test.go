@@ -119,9 +119,9 @@ func TestSetup(t *testing.T) {
 	if strings.Index(out, "User to log in as") > strings.Index(out, "SSH private key") {
 		t.Errorf("asked for the key before the user:\n%s", out)
 	}
-	info, err := os.Stat(filepath.Join(ta.configDir, "servers", "box1.json"))
+	info, err := os.Stat(filepath.Join(ta.configDir, "ssh_config"))
 	if err != nil || info.Mode().Perm() != 0o600 {
-		t.Errorf("server file: %v, %v", info, err)
+		t.Errorf("ssh_config: %v, %v", info, err)
 	}
 
 	ta.stdout.Reset()
@@ -252,15 +252,11 @@ func TestSetupRename(t *testing.T) {
 	}
 }
 
-func TestSetupOldServer(t *testing.T) {
+// A server edited by hand in rembox's ssh config, without a Port.
+func TestSetupHandEditedServer(t *testing.T) {
 	ta := newTestApp(t, "0.1.0")
 	key := ta.withKey(t, "id_ed25519")
-	// Saved by rembox 0.6.0, without a port.
-	path := filepath.Join(ta.configDir, "servers", "box.json")
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, []byte(`{"host": "box", "user": "root", "key": "`+key+`"}`), 0o600); err != nil {
+	if err := config.WriteFile(filepath.Join(ta.configDir, "ssh_config"), []byte("Host box\n  User root\n  IdentityFile "+key+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	ta.typing("", "", "", "", "", "n")
@@ -505,7 +501,7 @@ func TestSetupNoPort(t *testing.T) {
 func TestSetupNameTaken(t *testing.T) {
 	ta := newTestApp(t, "0.1.0")
 	key := ta.withKey(t, "id_ed25519")
-	if err := config.SaveServer(ta.configDir, config.Server{Name: "box", Host: "old", User: "root", Key: key}); err != nil {
+	if err := config.SaveServer(ta.configDir, config.Server{Name: "box", Host: "old", Port: 22, User: "root", Key: key}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -555,17 +551,16 @@ func TestListEmpty(t *testing.T) {
 	}
 }
 
-func TestListSkipsBrokenFiles(t *testing.T) {
+func TestListSkipsBrokenServers(t *testing.T) {
 	ta := newTestApp(t, "0.1.0")
-	if err := config.SaveServer(ta.configDir, config.Server{Name: "good", Host: "h", User: "root", Key: "/k"}); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(ta.configDir, "servers", "bad.json"), []byte("{"), 0o600); err != nil {
+	body := "Host good\n  User root\n  IdentityFile /k\n\nHost bad\n  IdentityFile /k\n"
+	if err := config.WriteFile(filepath.Join(ta.configDir, "ssh_config"), []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
 	ta.mustRun(t, "list")
-	if !strings.Contains(ta.stdout.String(), "good") || !strings.Contains(ta.stderr.String(), "bad.json") {
+	if !strings.Contains(ta.stdout.String(), "good") || strings.Contains(ta.stdout.String(), "bad") ||
+		!strings.Contains(ta.stderr.String(), "rembox: skipping a server: bad in "+filepath.Join(ta.configDir, "ssh_config")+": no User") {
 		t.Errorf("stdout:\n%s\nstderr:\n%s", ta.stdout, ta.stderr)
 	}
 }
