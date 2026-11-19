@@ -2,10 +2,12 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -34,20 +36,21 @@ func TestSaveServer(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	// New servers go at the end.
 	want := sshConfigHeader + `
-Host a
-  HostName a
-  Port 22
-  User root
-  IdentityFile /keys/a
-  IdentitiesOnly yes
-  ServerAliveInterval 15
-
 Host b 203.0.113.10
   HostName 203.0.113.10
   Port 23456
   User ada
   IdentityFile "/keys/id ed25519"
+  IdentitiesOnly yes
+  ServerAliveInterval 15
+
+Host a
+  HostName a
+  Port 22
+  User root
+  IdentityFile /keys/a
   IdentitiesOnly yes
   ServerAliveInterval 15
 `
@@ -212,15 +215,98 @@ Host good
 	if s, err := LoadServer(dir, "good"); err != nil || s.Host != "good" {
 		t.Errorf("LoadServer(good) = %+v, %v", s, err)
 	}
+}
 
-	// Saving a server writes the servers it could read, and leaves out the
-	// rest.
-	if err := SaveServer(dir, Server{Name: "new", Host: "n", Port: 22, User: "u", Key: "/k"}); err != nil {
+// Saving or removing a server changes only its Host blocks, even broken ones,
+// and leaves the rest of the file as it is: other servers, broken or with
+// options of their own, comments, Host * and Match.
+func TestSaveServerKeepsTheRest(t *testing.T) {
+	dir := t.TempDir()
+	head := `# my notes
+Host *
+  ServerAliveCountMax 4
+
+# the box
+`
+	other := `Host other
+  HostName o.example.com # mine
+  User root
+  IdentityFile /k
+  ForwardAgent yes
+
+`
+	typo := `Host typo
+  Port 22x
+  User root
+  IdentityFile /k
+
+`
+	tail := `Match host *.internal
+  User me
+`
+	box := func(host string) string {
+		return "Host box " + host + "\n  HostName " + host +
+			"\n  Port 22\n  User ada\n  IdentityFile /k\n  IdentitiesOnly yes\n  ServerAliveInterval 15\n"
+	}
+	writeSSHConfig(t, dir, head+"Host box\n  User old\n\n"+other+typo+"Host box\n  User again\n\n"+tail)
+
+	// Its first block is replaced in place, and any more removed.
+	if err := SaveServer(dir, Server{Name: "box", Host: "b1", Port: 22, User: "ada", Key: "/k"}); err != nil {
 		t.Fatal(err)
 	}
-	servers, bad, _ = Servers(dir)
-	if len(servers) != 2 || servers[0].Name != "good" || servers[1].Name != "new" || bad != nil {
-		t.Errorf("after saving: %+v, %v", servers, bad)
+	want := head + box("b1") + "\n" + other + typo + tail
+	if got := readSSHConfigFile(t, dir); got != want {
+		t.Errorf("after saving box:\n%s\nwant:\n%s", got, want)
+	}
+
+	if err := SaveServer(dir, Server{Name: "new", Host: "n", Port: 22, User: "ada", Key: "/k"}); err != nil {
+		t.Fatal(err)
+	}
+	newBlock := "Host new n\n  HostName n\n  Port 22\n  User ada\n  IdentityFile /k\n  IdentitiesOnly yes\n  ServerAliveInterval 15\n"
+	want += "\n" + newBlock
+	if got := readSSHConfigFile(t, dir); got != want {
+		t.Errorf("after saving new:\n%s\nwant:\n%s", got, want)
+	}
+
+	// Removing one, broken or not, leaves the rest.
+	for _, name := range []string{"other", "typo"} {
+		if err := RemoveServer(dir, name); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want = head + box("b1") + "\n" + tail + "\n" + newBlock
+	if got := readSSHConfigFile(t, dir); got != want {
+		t.Errorf("after removing other and typo:\n%s\nwant:\n%s", got, want)
+	}
+	if err := RemoveServer(dir, "new"); err != nil {
+		t.Fatal(err)
+	}
+	if got := readSSHConfigFile(t, dir); got != head+box("b1")+"\n"+tail {
+		t.Errorf("after removing new:\n%s", got)
+	}
+}
+
+// Two rembox runs saving servers at once both get saved.
+func TestSaveServerConcurrent(t *testing.T) {
+	dir := t.TempDir()
+	var wg sync.WaitGroup
+	errs := make(chan error, 20)
+	for i := range 20 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			errs <- SaveServer(dir, Server{Name: fmt.Sprintf("box%d", i), Host: "h", Port: 22, User: "u", Key: "/k"})
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if servers, bad, err := Servers(dir); len(servers) != 20 || bad != nil || err != nil {
+		t.Errorf("saved %d servers, want 20: %v %v", len(servers), bad, err)
 	}
 }
 

@@ -46,9 +46,8 @@ func CheckName(name string) error {
 // ~/.ssh/config includes it if you agree.
 func SSHConfig(dir string) string { return filepath.Join(dir, "ssh_config") }
 
-const sshConfigHeader = `# Your rembox servers, a Host block each. rembox rewrites this file when you add,
-# change or remove one, keeping each server's HostName, Port, User and
-# IdentityFile; put other options in ~/.ssh/config.
+const sshConfigHeader = `# Your rembox servers, a Host block each. 'rembox setup' writes a server's block
+# afresh, and 'rembox remove' removes it; the rest stays as you left it.
 `
 
 // entry is a server's Host block, as read: the server, or why it can't be.
@@ -57,10 +56,8 @@ type entry struct {
 	err    error
 }
 
-// readSSHConfig reads the Host blocks in SSHConfig(dir) named like servers,
-// in order. Others, like Host * or Match, aren't servers rembox added, so
-// they're left out.
-func readSSHConfig(dir string) ([]entry, error) {
+// decodeSSHConfig parses SSHConfig(dir), or returns nil if there isn't one.
+func decodeSSHConfig(dir string) (*ssh_config.Config, error) {
 	path := SSHConfig(dir)
 	b, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -73,14 +70,34 @@ func readSSHConfig(dir string) ([]entry, error) {
 	if err != nil {
 		return nil, fmt.Errorf("reading %s: %w", path, err)
 	}
+	return cfg, nil
+}
+
+// serverName is the name of the server h is the Host block of: its first
+// pattern. It's "" if h isn't one, like Host * or Match, which aren't servers
+// rembox added.
+func serverName(h *ssh_config.Host) string {
+	if len(h.Patterns) == 0 || strings.HasPrefix(strings.TrimSpace(h.String()), "Match") {
+		return ""
+	}
+	if name := h.Patterns[0].String(); CheckName(name) == nil {
+		return name
+	}
+	return ""
+}
+
+// readSSHConfig reads the servers' Host blocks in SSHConfig(dir), in order.
+func readSSHConfig(dir string) ([]entry, error) {
+	cfg, err := decodeSSHConfig(dir)
+	if cfg == nil {
+		return nil, err
+	}
+	path := SSHConfig(dir)
 	var entries []entry
 	seen := map[string]bool{}
 	for _, h := range cfg.Hosts {
-		if len(h.Patterns) == 0 || strings.HasPrefix(h.String(), "Match") {
-			continue
-		}
-		name := h.Patterns[0].String()
-		if CheckName(name) != nil {
+		name := serverName(h)
+		if name == "" {
 			continue
 		}
 		s, err := parseServer(name, h)
@@ -189,9 +206,7 @@ func SaveServer(dir string, s Server) error {
 	if s.Host == "" || s.User == "" || s.Key == "" || s.Port < 1 || s.Port > 65535 {
 		return fmt.Errorf("%s needs a host, user, key, and port from 1 to 65535", s.Name)
 	}
-	return rewriteSSHConfig(dir, func(servers []Server) []Server {
-		return append(without(servers, s.Name), s)
-	})
+	return rewriteSSHConfig(dir, s.Name, &s)
 }
 
 // RemoveServer removes the server called name from SSHConfig(dir).
@@ -199,42 +214,75 @@ func RemoveServer(dir, name string) error {
 	if err := CheckName(name); err != nil {
 		return err
 	}
-	return rewriteSSHConfig(dir, func(servers []Server) []Server {
-		return without(servers, name)
-	})
+	return rewriteSSHConfig(dir, name, nil)
 }
 
-func without(servers []Server, name string) []Server {
-	var kept []Server
-	for _, s := range servers {
-		if s.Name != name {
-			kept = append(kept, s)
-		}
-	}
-	return kept
-}
-
-// rewriteSSHConfig writes SSHConfig(dir) afresh, with the servers in it
-// changed by change. Blocks it can't read as servers are left out. If it
-// can't read the file at all, it leaves it as it is.
-func rewriteSSHConfig(dir string, change func([]Server) []Server) error {
-	servers, _, err := Servers(dir)
+// rewriteSSHConfig replaces the Host blocks of the server called name in
+// SSHConfig(dir), even ones it can't read, with s's, or removes them if s is
+// nil. The rest of the file, like other servers' blocks, broken or not, stays
+// as it is. If it can't parse the file, it leaves it as it is. It holds a lock
+// throughout, so two rembox runs saving servers at once don't lose either.
+func rewriteSSHConfig(dir, name string, s *Server) error {
+	unlock, err := lockSSHConfig(dir)
 	if err != nil {
 		return err
 	}
-	servers = change(servers)
-	sort.Slice(servers, func(i, j int) bool { return servers[i].Name < servers[j].Name })
-	var b strings.Builder
-	b.WriteString(sshConfigHeader)
-	for _, s := range servers {
-		hosts := s.Name
-		if !strings.EqualFold(s.Host, s.Name) {
-			hosts += " " + s.Host
-		}
-		fmt.Fprintf(&b, "\nHost %s\n  HostName %s\n  Port %d\n  User %s\n  IdentityFile %s\n  IdentitiesOnly yes\n  ServerAliveInterval 15\n",
-			hosts, s.Host, s.Port, s.User, QuoteSSH(s.Key))
+	defer unlock()
+	cfg, err := decodeSSHConfig(dir)
+	if err != nil {
+		return err
 	}
-	return WriteFile(SSHConfig(dir), []byte(b.String()), 0o600)
+
+	var b strings.Builder
+	// gap puts a blank line before or after a block rembox writes, unless
+	// there is one, or a comment, as for the block it replaces.
+	gap := func() {
+		text := strings.TrimSuffix(b.String(), "\n")
+		last := strings.TrimSpace(text[strings.LastIndex(text, "\n")+1:])
+		if text != "" && last != "" && !strings.HasPrefix(last, "#") {
+			b.WriteString("\n")
+		}
+	}
+	written, after := s == nil, false
+	var hosts []*ssh_config.Host
+	if cfg != nil {
+		hosts = cfg.Hosts
+	} else {
+		b.WriteString(sshConfigHeader + "\n")
+	}
+	for _, h := range hosts {
+		switch {
+		case serverName(h) != name:
+			if after {
+				gap()
+				after = false
+			}
+			b.WriteString(h.String())
+		case !written:
+			gap()
+			b.WriteString(hostBlock(*s))
+			written, after = true, true
+		}
+	}
+	if !written {
+		gap()
+		b.WriteString(hostBlock(*s))
+	}
+	out := strings.TrimRight(b.String(), "\n")
+	if out != "" {
+		out += "\n"
+	}
+	return WriteFile(SSHConfig(dir), []byte(out), 0o600)
+}
+
+// hostBlock is the Host block rembox writes for s.
+func hostBlock(s Server) string {
+	hosts := s.Name
+	if !strings.EqualFold(s.Host, s.Name) {
+		hosts += " " + s.Host
+	}
+	return fmt.Sprintf("Host %s\n  HostName %s\n  Port %d\n  User %s\n  IdentityFile %s\n  IdentitiesOnly yes\n  ServerAliveInterval 15\n",
+		hosts, s.Host, s.Port, s.User, QuoteSSH(s.Key))
 }
 
 // QuoteSSH quotes s for an ssh config file, if it has spaces.
