@@ -1,46 +1,34 @@
 # postgres.sh: has apt install PostgreSQL from PostgreSQL's apt repo, and adds
 # a PostgreSQL superuser for your user, so it can run psql as itself.
 
-# Where PostgreSQL's docs, at postgresql.org/download/linux/debian, put them.
-PG_KEY=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
-PG_SOURCES=/etc/apt/sources.list.d/pgdg.list
+# PostgreSQL's script, from postgresql-common, that adds its apt repo, as
+# PostgreSQL's docs, at postgresql.org/download/linux/debian, do. It writes
+# pgdg.sources, or pgdg.list in older versions.
+PG_REPO_SCRIPT=/usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
+PG_SOURCES=(/etc/apt/sources.list.d/pgdg.sources /etc/apt/sources.list.d/pgdg.list)
 
 # add_postgres_repo: has apt install PostgreSQL from PostgreSQL's apt repo, as
-# the distros' lag behind (15 on Debian 12, 16 on Ubuntu 24.04). It goes
-# before update, and install_basics installs postgresql from it.
+# the distros' lag behind (15 on Debian 12, 16 on Ubuntu 24.04), with
+# PostgreSQL's own script, unless it's added already. Then update upgrades
+# postgresql-common, and so the repo's key, from it. It goes before update,
+# and install_basics installs postgresql from it.
 add_postgres_repo() {
   step "Install PostgreSQL from PostgreSQL's apt repo, which has its latest version"
-  local codename dir changed=no content
-  # shellcheck disable=SC1091
-  codename=$(. /etc/os-release && echo "$VERSION_CODENAME")
-  # A release the repo doesn't have yet would make apt update fail.
-  if ! curl -fsSI "https://apt.postgresql.org/pub/repos/apt/dists/$codename-pgdg/Release" >/dev/null; then
-    warn "PostgreSQL's apt repo doesn't have $codename, or couldn't be reached, so PostgreSQL comes from the distro, or stays as it is."
-    return
-  fi
-  dir=$(mktemp -d)
-  # The key may change, so it's downloaded again each time.
-  if ! run curl -fsSL -o "$dir/key.asc" https://www.postgresql.org/media/keys/ACCC4CF8.asc; then
-    rm -rf "$dir"
-    warn "Couldn't download the key for PostgreSQL's apt repo, so PostgreSQL comes from the distro, or stays as it is. Run rembox setup again later."
-    return
-  fi
-  if ! cmp -s "$dir/key.asc" "$PG_KEY"; then
-    [[ -d ${PG_KEY%/*} ]] || run install -d -m 755 "${PG_KEY%/*}"
-    run install -m 644 "$dir/key.asc" "$PG_KEY"
-    changed=yes
-  fi
-  rm -rf "$dir"
-  content="deb [signed-by=$PG_KEY] https://apt.postgresql.org/pub/repos/apt $codename-pgdg main"
-  if ! same "$PG_SOURCES" "$content"; then
-    put "$PG_SOURCES" 644 "$content"
-    changed=yes
-  fi
-  if [[ $changed == yes ]]; then
-    ok "apt installs PostgreSQL from PostgreSQL's apt repo, and update upgrades it."
-  else
+  if [[ -e ${PG_SOURCES[0]} || -e ${PG_SOURCES[1]} ]]; then
     ok "apt installs PostgreSQL from PostgreSQL's apt repo already."
+    return
   fi
+  if [[ ! -x $PG_REPO_SCRIPT ]]; then
+    run "${APT[@]}" update
+    install_packages postgresql-common
+  fi
+  # -y: doesn't ask first. It checks the repo has this release, and runs
+  # apt-get update.
+  if ! run "$PG_REPO_SCRIPT" -y; then
+    warn "PostgreSQL's script couldn't add its apt repo, as it says above, so PostgreSQL comes from the distro, or stays as it is."
+    return
+  fi
+  ok "apt installs PostgreSQL from PostgreSQL's apt repo, and update upgrades it."
 }
 
 # add_postgres_role USER: adds a PostgreSQL superuser role named USER, and a

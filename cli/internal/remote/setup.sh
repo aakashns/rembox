@@ -6,7 +6,8 @@
 #   setup.sh start DEFAULT_USER DEFAULT_PORT LOGIN_PORT NAME
 #     As root, as the user you log in as, on LOGIN_PORT: checks that rembox
 #     can set up the server, makes NAME its hostname, adds swap, has apt
-#     install gh from GitHub's apt repo, and PostgreSQL from PostgreSQL's,
+#     install gh from GitHub's apt repo, PostgreSQL from PostgreSQL's, and
+#     Caddy from Caddy's,
 #     installs the latest version of every
 #     package, has unattended-upgrades install security updates every day,
 #     reaches sites with only IPv4 through public NAT64, if the server has
@@ -59,6 +60,7 @@ main() {
     checklist_send
     add_gh_repo
     add_postgres_repo
+    add_caddy_repo
     update
     setup_auto_upgrades
     checklist_send

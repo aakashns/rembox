@@ -26,7 +26,8 @@ Run `rembox setup` to begin setting up a remote server.
 - [`hostname.sh`](cli/internal/remote/hostname.sh): makes the server's name in rembox its hostname.
 - [`swap.sh`](cli/internal/remote/swap.sh): adds a swap file as big as memory, up to 4 GiB.
 - [`git.sh`](cli/internal/remote/git.sh): has apt install gh from GitHub's apt repo; later, as your user, sets your name and email for git and logs gh in to GitHub.
-- [`postgres.sh`](cli/internal/remote/postgres.sh): has apt install PostgreSQL from PostgreSQL's apt repo; later, adds a PostgreSQL superuser for your user, so it can run psql as itself.
+- [`postgres.sh`](cli/internal/remote/postgres.sh): has apt install PostgreSQL from PostgreSQL's apt repo, with PostgreSQL's own script; later, adds a PostgreSQL superuser for your user, so it can run psql as itself.
+- [`caddy.sh`](cli/internal/remote/caddy.sh): has apt install Caddy from Caddy's apt repo, as Caddy's docs do.
 - [`update.sh`](cli/internal/remote/update.sh): upgrades packages, turns on daily security updates, and installs dev tools (fzf, zoxide and Zellij from their latest releases).
 - [`nat64.sh`](cli/internal/remote/nat64.sh): if the server has only IPv6, looks up names with public DNS64 resolvers, to reach sites with only IPv4, like GitHub, through NAT64.
 - [`toolchains.sh`](cli/internal/remote/toolchains.sh): installs the latest Go; later, as your user, the latest bun, Node (with Vite+), Python (with uv), Rust (with rustup) and Playwright (with Chromium). Asks before upgrading them.
